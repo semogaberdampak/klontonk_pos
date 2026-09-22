@@ -12,7 +12,12 @@ import { renderTransaksiPage, initTransaksiPage } from './pages/transaksi.js';
 import { renderStokKeluarPage, initStokKeluarPage } from './pages/stok-keluar.js';
 import { renderStokTotalPage, initStokTotalPage } from './pages/stok-total.js';
 import { renderStokReturPage, initStokReturPage } from './pages/stok-retur.js';
-import { renderLaporanPage, initLaporanPage } from './pages/laporan.js';
+import {
+  renderLaporanStokAwalPage, initLaporanStokAwalPage,
+  renderLaporanStokKeluarPage, initLaporanStokKeluarPage,
+  renderLaporanStokReturPage, initLaporanStokReturPage,
+  renderLaporanStokTotalPage, initLaporanStokTotalPage
+} from './pages/laporan.js';
 import { ReturnStore } from './returns.js';
 import { checkDbStatus, describeDb } from './db-status.js';
 import { SalesStore } from './sales.js';
@@ -106,6 +111,21 @@ if (bottomNav) {
         { id: '/stok/keluar-laku', label: 'Stok Keluar (Laku)', desc: 'Stok keluar akibat penjualan', icon: SHEET_ICONS.box },
         { id: '/stok/retur', label: 'Stok Retur', desc: 'Retur pelanggan & barang rusak', icon: SHEET_ICONS.box },
         { id: '/stok/total', label: 'Stok Total', desc: 'Sisa stok terakhir setelah transaksi', icon: SHEET_ICONS.box }
+      ]
+    });
+    if (sel) navigate(sel.id);
+  });
+
+  // Tab Laporan → sheet sub-menu laporan
+  const laporanTab = bottomNav.querySelector('[data-tab="laporan"]');
+  if (laporanTab) laporanTab.addEventListener('click', async () => {
+    const sel = await UI.sheet({
+      title: 'Menu Laporan',
+      items: [
+        { id: '/laporan/stok-awal', label: 'Stok Awal', desc: 'Laporan stok awal periode', icon: SHEET_ICONS.box },
+        { id: '/laporan/stok-keluar', label: 'Stok Keluar (Laku)', desc: 'Laporan stok keluar akibat penjualan', icon: SHEET_ICONS.box },
+        { id: '/laporan/stok-retur', label: 'Stok Retur', desc: 'Laporan retur pelanggan & barang rusak', icon: SHEET_ICONS.box },
+        { id: '/laporan/stok-total', label: 'Stok Total', desc: 'Laporan sisa stok terkini', icon: SHEET_ICONS.box }
       ]
     });
     if (sel) navigate(sel.id);
@@ -268,7 +288,10 @@ router
   .add('/stok/retur', () => { setTimeout(initStokReturPage, 150); return renderStokReturPage(); })
   .add('/stok/total', () => { setTimeout(initStokTotalPage, 150); return renderStokTotalPage(); })
   .add('/harga', () => { setTimeout(initHargaPage, 150); return renderHargaPage(); })
-  .add('/laporan-kasir', () => { setTimeout(initLaporanPage, 150); return renderLaporanPage(); })
+  .add('/laporan/stok-awal', () => { setTimeout(initLaporanStokAwalPage, 150); return renderLaporanStokAwalPage(); })
+  .add('/laporan/stok-keluar', () => { setTimeout(initLaporanStokKeluarPage, 150); return renderLaporanStokKeluarPage(); })
+  .add('/laporan/stok-retur', () => { setTimeout(initLaporanStokReturPage, 150); return renderLaporanStokReturPage(); })
+  .add('/laporan/stok-total', () => { setTimeout(initLaporanStokTotalPage, 150); return renderLaporanStokTotalPage(); })
   .add('/users', adminGuard(renderUsersPage, initUsersPage))
   .setNotFound(() => placeholderPage('404', 'Halaman yang Anda tuju tidak ditemukan.'))
   .start();
