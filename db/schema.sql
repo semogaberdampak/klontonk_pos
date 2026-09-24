@@ -87,6 +87,14 @@ CREATE TABLE IF NOT EXISTS sale_lines (
   FOREIGN KEY (tenant_id, sale_no) REFERENCES sales (tenant_id, no) ON DELETE CASCADE
 );
 
+-- Penjualan offline: client_id = kunci idempotensi dari aplikasi, offline = dibuat saat perangkat offline,
+-- review_note = selisih yang perlu ditinjau (stok kurang, total beda dari struk offline, dst).
+ALTER TABLE sales
+  ADD COLUMN IF NOT EXISTS client_id   uuid,
+  ADD COLUMN IF NOT EXISTS offline     boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS review_note text CHECK (review_note IS NULL OR char_length(review_note) <= 500);
+CREATE UNIQUE INDEX IF NOT EXISTS sales_client_id_uq ON sales (tenant_id, client_id) WHERE client_id IS NOT NULL;
+
 -- ---------------------------------------------------------------------------
 -- Retur stok. kind = 'pelanggan' (barang kembali ke stok, ada pengembalian uang) atau
 -- 'supplier' (barang rusak / kedaluwarsa keluar dari stok, tanpa uang). Diisi hanya oleh process_return().
@@ -205,18 +213,34 @@ GRANT SELECT, INSERT, UPDATE ON profiles TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON stock_items TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON app_updates TO authenticated;
 
+-- Tanda tangan lama (4 argumen) dibuang agar tidak ada dua versi checkout().
+DROP FUNCTION IF EXISTS public.checkout(text, text, integer, jsonb);
+
 -- ---------------------------------------------------------------------------
 -- checkout(): satu transaksi penjualan yang atomik.
 --   * kunci baris stok (FOR UPDATE), periksa cukup, kurangi stok, hitung total dari HARGA DI DATABASE,
 --     buat nomor transaksi, simpan header + baris, kembalikan struk sebagai jsonb.
 --   * Bila satu barang saja tidak cukup / tidak ada / belum berharga, tidak ada yang berubah.
+--   * p_client_id (UUID buatan aplikasi) membuat panggilan IDEMPOTEN: mengulang panggilan yang sama
+--     (mis. respons hilang saat jaringan putus) mengembalikan penjualan yang sudah tercatat, bukan menggandakannya.
+--   * p_offline = true untuk penjualan yang dibuat saat perangkat offline dan baru dikirim belakangan.
+--     Barang sudah diserahkan dan uang sudah diterima, jadi penjualan TETAP dicatat walau ada selisih:
+--       - stok kurang  → stok dipotong sampai 0 (tidak minus);
+--       - total berbeda dari struk offline (p_expected_total) atau uang kurang → dicatat, harga tetap milik database;
+--       - waktu jual (p_at) dipakai bila wajar (maks 30 hari lalu, tidak di masa depan).
+--     Semua selisih ditulis ke sales.review_note agar bisa ditinjau. Harga TIDAK pernah dipercaya dari perangkat.
+--     Barang yang sudah dihapus / belum berharga tetap ditolak (tidak bisa dicatat dengan benar).
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.checkout(p_tenant text, p_method text, p_paid integer, p_lines jsonb)
+CREATE OR REPLACE FUNCTION public.checkout(
+  p_tenant text, p_method text, p_paid integer, p_lines jsonb,
+  p_client_id uuid DEFAULT NULL, p_offline boolean DEFAULT false,
+  p_at timestamptz DEFAULT NULL, p_expected_total integer DEFAULT NULL)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
 DECLARE
   v_uid     uuid := auth.uid();
+  v_now     timestamptz := now();
   v_at      timestamptz := now();
   v_cashier text;
   v_total   bigint := 0;
@@ -227,6 +251,9 @@ DECLARE
   v_suffix  integer := 1;
   v_paid    integer;
   v_lines   jsonb := '[]'::jsonb;
+  v_notes   text[] := ARRAY[]::text[];
+  v_note    text;
+  v_existing public.sales%ROWTYPE;
   r         record;
 BEGIN
   IF v_uid IS NULL OR public.app_role() IS NULL THEN
@@ -242,12 +269,35 @@ BEGIN
     RAISE EXCEPTION 'Keranjang tidak valid.' USING ERRCODE = '22023';
   END IF;
 
+  -- Idempotensi: panggilan kedua dengan client_id yang sama menunggu yang pertama, lalu mengembalikan hasilnya.
+  IF p_client_id IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended(p_tenant || ':' || p_client_id::text, 0));
+    SELECT * INTO v_existing FROM public.sales WHERE tenant_id = p_tenant AND client_id = p_client_id;
+    IF FOUND THEN
+      RETURN jsonb_build_object(
+        'no', v_existing.no, 'at', v_existing.at, 'cashier', v_existing.cashier, 'method', v_existing.method,
+        'total', v_existing.total, 'paid', v_existing.paid,
+        'offline', v_existing.offline, 'review_note', v_existing.review_note,
+        'lines', (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', l.item_id, 'name', l.name, 'unit', l.unit,
+                                                                'qty', l.qty, 'price', l.price) ORDER BY l.item_id), '[]'::jsonb)
+                    FROM public.sale_lines l WHERE l.tenant_id = p_tenant AND l.sale_no = v_existing.no));
+    END IF;
+  END IF;
+
   SELECT count(*) INTO v_count FROM jsonb_array_elements(p_lines);
   IF v_count < 1 OR v_count > 200
      OR v_count <> (SELECT count(DISTINCT e->>'id') FROM jsonb_array_elements(p_lines) e)
      OR EXISTS (SELECT 1 FROM jsonb_array_elements(p_lines) e
                 WHERE (e->>'id') IS NULL OR (e->>'qty') !~ '^[0-9]{1,7}$' OR (e->>'qty')::int < 1) THEN
     RAISE EXCEPTION 'Keranjang tidak valid.' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_offline AND p_at IS NOT NULL THEN
+    IF p_at <= v_now + interval '5 minutes' AND p_at >= v_now - interval '30 days' THEN
+      v_at := LEAST(p_at, v_now);
+    ELSE
+      v_notes := array_append(v_notes, 'Waktu dari perangkat tidak wajar, memakai waktu sinkron.');
+    END IF;
   END IF;
 
   FOR r IN
@@ -263,7 +313,10 @@ BEGIN
       RAISE EXCEPTION 'Harga "%" belum diisi.', r.name USING ERRCODE = 'P0001';
     END IF;
     IF r.qty < r.want THEN
-      RAISE EXCEPTION 'Stok "%" tinggal % %.', r.name, r.qty, r.unit USING ERRCODE = 'P0001';
+      IF NOT p_offline THEN
+        RAISE EXCEPTION 'Stok "%" tinggal % %.', r.name, r.qty, r.unit USING ERRCODE = 'P0001';
+      END IF;
+      v_notes := array_append(v_notes, format('Stok "%s" kurang: tersedia %s %s, terjual %s.', r.name, r.qty, r.unit, r.want));
     END IF;
     v_total := v_total + r.want::bigint * r.price;
     v_lines := v_lines || jsonb_build_object('id', r.id, 'name', r.name, 'unit', r.unit, 'qty', r.want, 'price', r.price);
@@ -276,30 +329,39 @@ BEGIN
     RAISE EXCEPTION 'Total belanja tidak valid.' USING ERRCODE = '22023';
   END IF;
 
+  IF p_offline AND p_expected_total IS NOT NULL AND p_expected_total <> v_total THEN
+    v_notes := array_append(v_notes, format('Total struk offline Rp %s berbeda dari total database Rp %s.', p_expected_total, v_total));
+  END IF;
+
   v_paid := CASE WHEN p_method = 'tunai' THEN p_paid ELSE v_total::int END;
   IF v_paid IS NULL OR v_paid < v_total THEN
-    RAISE EXCEPTION 'Uang diterima kurang dari total.' USING ERRCODE = 'P0001';
+    IF NOT p_offline OR v_paid IS NULL OR v_paid < 1 THEN
+      RAISE EXCEPTION 'Uang diterima kurang dari total.' USING ERRCODE = 'P0001';
+    END IF;
+    v_notes := array_append(v_notes, format('Uang diterima Rp %s kurang dari total database Rp %s.', v_paid, v_total));
+    v_paid := v_total::int;
   END IF;
   IF v_paid > 1000000000 THEN
     RAISE EXCEPTION 'Uang diterima terlalu besar.' USING ERRCODE = '22023';
   END IF;
 
   UPDATE public.stock_items s
-     SET qty = s.qty - q.want
+     SET qty = GREATEST(s.qty - q.want, 0)
     FROM (SELECT e->>'id' AS id, (e->>'qty')::int AS want FROM jsonb_array_elements(p_lines) e) q
    WHERE s.tenant_id = p_tenant AND s.id = q.id;
 
   SELECT left(regexp_replace(name, '[^[:alnum:] .,''()&/+-]', '', 'g'), 60) INTO v_cashier
     FROM public.profiles WHERE id = v_uid;
   v_cashier := COALESCE(NULLIF(btrim(v_cashier), ''), 'Kasir');
+  v_note := NULLIF(left(array_to_string(v_notes, ' '), 500), '');
 
   -- Nomor: TRX-YYYYMMDD-HHMMSS (waktu Jakarta); bila bentrok di detik yang sama, akhiran -2, -3, ...
   v_base := 'TRX-' || to_char(v_at AT TIME ZONE 'Asia/Jakarta', 'YYYYMMDD-HH24MISS');
   LOOP
     v_no := CASE WHEN v_suffix = 1 THEN v_base ELSE v_base || '-' || v_suffix END;
     BEGIN
-      INSERT INTO public.sales (tenant_id, no, at, cashier, method, total, paid)
-      VALUES (p_tenant, v_no, v_at, v_cashier, p_method, v_total::int, v_paid);
+      INSERT INTO public.sales (tenant_id, no, at, cashier, method, total, paid, client_id, offline, review_note)
+      VALUES (p_tenant, v_no, v_at, v_cashier, p_method, v_total::int, v_paid, p_client_id, p_offline, v_note);
       EXIT;
     EXCEPTION WHEN unique_violation THEN
       v_suffix := v_suffix + 1;
@@ -312,7 +374,8 @@ BEGIN
     FROM jsonb_array_elements(v_lines) l;
 
   RETURN jsonb_build_object('no', v_no, 'at', v_at, 'cashier', v_cashier, 'method', p_method,
-                            'total', v_total::int, 'paid', v_paid, 'lines', v_lines);
+                            'total', v_total::int, 'paid', v_paid, 'offline', p_offline, 'review_note', v_note,
+                            'lines', v_lines);
 END;
 $$;
 
@@ -438,8 +501,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.checkout(text, text, integer, jsonb) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.checkout(text, text, integer, jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.checkout(text, text, integer, jsonb, uuid, boolean, timestamptz, integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.checkout(text, text, integer, jsonb, uuid, boolean, timestamptz, integer) TO authenticated;
 REVOKE ALL ON FUNCTION public.process_return(text, text, text, integer, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.process_return(text, text, text, integer, text, text) TO authenticated;
 REVOKE ALL ON FUNCTION public.delete_app_user(text) FROM PUBLIC, anon;

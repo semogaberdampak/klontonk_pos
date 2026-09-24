@@ -6,13 +6,15 @@ import { StockStore } from './stock.js';
 import { SalesStore } from './sales.js';
 import { ReturnStore } from './returns.js';
 import { renderLogin, initLoginPage } from './pages/login.js';
-import { registerServiceWorker, watchConnectivity } from './pwa.js';
+import { registerServiceWorker, watchConnectivity, onFlushRequested } from './pwa.js';
 import { setupShell } from './shell.js';
 import { startRouter } from './routes.js';
 import { showWelcomePopup } from './welcome.js';
 
 // ============ TITIK MASUK APLIKASI ============
 // Urutan: sistem inti → PWA → cek login → (bila login) muat data dari database → pasang cangkang & rute.
+
+const OUTBOX_RETRY_MS = 60 * 1000;
 
 ThemeManager.init();
 TenantStore.init();
@@ -61,6 +63,7 @@ function startAuthenticatedApp() {
 
     setupShell();
     startRouter();
+    startOutboxSync();
     setTimeout(showWelcomePopup, 350);
   } catch (err) {
     showInitError(err);
@@ -76,9 +79,38 @@ async function loadData() {
   const [stock, sales, returns] = await Promise.all([StockStore.load(), SalesStore.load(), ReturnStore.load()]);
   if (stock.expired || sales.expired || returns.expired) return false;
 
+  if (stock.offline) {
+    // Tidak ada jaringan tapi ada salinan stok terakhir: cukup satu pemberitahuan, bukan galat per tabel.
+    const since = stock.at.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+    UI.toast(`Mode offline: memakai data stok terakhir (${since}). Penjualan dikirim otomatis saat internet kembali.`, { type: 'warning', duration: 9000 });
+    return true;
+  }
+
+  // Stok baru dimuat dari database: kurangi dengan penjualan offline yang belum terkirim.
+  SalesStore.reapplyUnsynced();
+
   const failed = [tenants, stock, sales, returns].find((result) => !result.success);
   if (failed) UI.toast(`Data belum bisa dimuat: ${failed.error}`, { type: 'danger', duration: 9000 });
   return true;
+}
+
+// Antrean penjualan offline: dikirim saat jaringan kembali, saat service worker membangunkan halaman,
+// tiap menit selama masih ada yang menunggu, dan sekali saat aplikasi dibuka (tanpa menahan tampilan).
+function startOutboxSync() {
+  SalesStore.onFlushed(({ synced, failed }) => {
+    if (synced.length) UI.toast(`${synced.length} penjualan offline berhasil dikirim.`, { type: 'success' });
+    if (failed.length) {
+      UI.toast(`${failed.length} penjualan offline ditolak database: ${failed[0].error} Buka menu Akun untuk meninjaunya.`, { type: 'danger', duration: 12000 });
+    }
+  });
+
+  const flush = () => { SalesStore.flush(); };
+  window.addEventListener('online', flush);
+  onFlushRequested(flush);
+  setInterval(() => {
+    if (navigator.onLine && SalesStore.outboxState().pending) flush();
+  }, OUTBOX_RETRY_MS);
+  flush();
 }
 
 // WAJIB menunggu inisialisasi auth selesai (verifikasi sesi bersifat async). Tanpa await ini, status login

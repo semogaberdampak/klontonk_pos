@@ -114,6 +114,15 @@ function saleTime(sale) {
   return `${date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}, ${time}`;
 }
 
+// Penanda untuk penjualan yang dibuat saat offline: belum terkirim, ditolak database, atau ada selisih
+// (stok kurang, total beda dari struk offline, dst) yang perlu ditinjau pemilik.
+function saleFlagHtml(sale) {
+  if (sale.failed) return `<p class="rep-trx-flag is-danger">Ditolak database: ${esc(sale.reviewNote)}</p>`;
+  if (sale.pending) return '<p class="rep-trx-flag">Dibuat offline, belum terkirim ke server.</p>';
+  if (sale.reviewNote) return `<p class="rep-trx-flag">Perlu ditinjau: ${esc(sale.reviewNote)}</p>`;
+  return '';
+}
+
 function salesListHtml(data) {
   const shown = showAllTrx ? data.sales : data.sales.slice(0, INITIAL_TRX_ROWS);
   const rows = shown.map((sale) => {
@@ -129,6 +138,7 @@ function salesListHtml(data) {
           </summary>
           <ul class="rep-trx-lines">${lines}</ul>
           <p class="rep-trx-foot">Kasir: ${esc(sale.cashier)}</p>
+          ${saleFlagHtml(sale)}
         </details>
       </li>`;
   }).join('');

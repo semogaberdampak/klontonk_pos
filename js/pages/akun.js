@@ -2,7 +2,9 @@ import { Auth } from '../auth.js';
 import { TenantStore } from '../tenant.js';
 import { ThemeManager } from '../theme.js';
 import { UI } from '../ui.js';
-import { esc } from '../format.js';
+import { esc, escAttr, formatRupiah } from '../format.js';
+import { SalesStore } from '../sales.js';
+import { autoPrint } from '../receipt.js';
 import { isOnline, isOfflineReady, clearAppCache } from '../pwa.js';
 
 // ============ HALAMAN INFORMASI AKUN & PENGATURAN ============
@@ -36,6 +38,33 @@ export function renderAkunPage() {
   `;
 }
 
+// Kartu antrean penjualan offline: yang menunggu dikirim, dan yang ditolak database (perlu keputusan kasir).
+function offlineQueueHtml({ pending, failed, entries }) {
+  const failedRows = entries.filter((entry) => entry.status === 'failed').map((entry) => {
+    const total = formatRupiah(entry.expectedTotal);
+    const when = new Date(entry.at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+    return `
+      <li class="offline-fail">
+        <p class="offline-fail-title">${esc(total)} · ${esc(when)}</p>
+        <p class="field-hint">${esc(entry.error || 'Ditolak database.')}</p>
+        <div class="offline-fail-actions">
+          <button type="button" class="btn btn-secondary" data-retry="${escAttr(entry.clientId)}">Coba lagi</button>
+          <button type="button" class="btn btn-secondary" data-discard="${escAttr(entry.clientId)}">Buang</button>
+        </div>
+      </li>`;
+  }).join('');
+
+  return `
+    <h2 class="section-title" style="margin-bottom:12px;">Penjualan Offline</h2>
+    <div class="account-rows" style="margin-bottom:16px;">
+      <div class="account-row"><span>Menunggu dikirim</span><span>${pending}</span></div>
+      <div class="account-row" style="border-bottom:none;"><span>Ditolak database</span><span>${failed}</span></div>
+    </div>
+    ${pending ? '<button type="button" class="btn btn-secondary btn-large" id="flushNowBtn" style="margin-bottom:12px;">Kirim Sekarang</button>' : ''}
+    ${failedRows ? `<ul class="offline-fail-list">${failedRows}</ul>` : ''}
+    <p class="field-hint">Penjualan yang dibuat saat offline tersimpan di perangkat ini sampai terkirim. Jangan hapus data situs atau cache browser sebelum semuanya terkirim.</p>`;
+}
+
 export function renderPengaturanPage() {
   const theme = document.documentElement.getAttribute('data-theme') || 'light';
   const tenant = TenantStore.getCurrent() || {};
@@ -62,6 +91,19 @@ export function renderPengaturanPage() {
       </div>
     </div>
     <div class="activity-card" style="padding: 24px; margin-top: 16px;">
+      <h2 class="section-title" style="margin-bottom:12px;">Struk</h2>
+      <div class="account-rows" style="margin-bottom:12px;">
+        <div class="account-row" style="border-bottom:none;">
+          <span>Cetak otomatis setelah bayar</span>
+          <button type="button" class="btn btn-secondary" id="autoPrintBtn" aria-pressed="${autoPrint && autoPrint.isOn()}">${autoPrint && autoPrint.isOn() ? 'Nyala' : 'Mati'}</button>
+        </div>
+      </div>
+      <p class="field-hint">Struk dicetak lewat dialog cetak browser, lebar kertas 58 mm. Pilih printer thermal yang terpasang, atau "Simpan sebagai PDF".</p>
+    </div>
+    <div class="activity-card" style="padding: 24px; margin-top: 16px;" id="offlineQueueCard">
+      ${offlineQueueHtml(SalesStore.outboxState())}
+    </div>
+    <div class="activity-card" style="padding: 24px; margin-top: 16px;">
       <h2 class="section-title" style="margin-bottom:12px;">Aplikasi &amp; Cache</h2>
       <div class="account-rows" style="margin-bottom:16px;">
         <div class="account-row"><span>Koneksi</span><span>${isOnline() ? 'Online' : 'Offline'}</span></div>
@@ -73,7 +115,63 @@ export function renderPengaturanPage() {
   `;
 }
 
+function initOfflineQueueCard() {
+  const card = document.getElementById('offlineQueueCard');
+  if (!card) return;
+
+  // Halaman ini tidak punya siklus pembersihan: berhenti mendengarkan begitu kartunya tak lagi ada di layar.
+  const unsubscribe = SalesStore.onOutboxChange((state) => {
+    if (!card.isConnected) return unsubscribe();
+    card.innerHTML = offlineQueueHtml(state);
+  });
+
+  card.addEventListener('click', async (event) => {
+    const flushBtn = event.target.closest('#flushNowBtn');
+    const retryBtn = event.target.closest('[data-retry]');
+    const discardBtn = event.target.closest('[data-discard]');
+
+    if (flushBtn) {
+      if (!isOnline()) return UI.toast('Belum ada koneksi internet.', { type: 'warning' });
+      flushBtn.disabled = true;
+      const summary = await SalesStore.flush();
+      if (summary.remaining) UI.toast(`${summary.remaining} penjualan masih menunggu. Coba lagi sebentar.`, { type: 'warning' });
+      return;
+    }
+
+    if (retryBtn) {
+      retryBtn.disabled = true;
+      await SalesStore.retry(retryBtn.dataset.retry);
+      return;
+    }
+
+    if (discardBtn) {
+      const confirmed = await UI.modal({
+        title: 'Buang Penjualan Offline',
+        message: 'Penjualan ini TIDAK akan tercatat di database dan stok tidak berkurang. Pastikan barangnya memang tidak jadi dijual. Lanjutkan?',
+        icon: 'danger',
+        confirmText: 'Ya, Buang',
+        cancelText: 'Batal',
+        variant: 'danger'
+      });
+      if (confirmed) await SalesStore.discard(discardBtn.dataset.discard);
+    }
+  });
+}
+
+function initAutoPrintToggle() {
+  const button = document.getElementById('autoPrintBtn');
+  if (!button || !autoPrint) return;
+  button.addEventListener('click', () => {
+    const next = !autoPrint.isOn();
+    autoPrint.set(next);
+    button.textContent = next ? 'Nyala' : 'Mati';
+    button.setAttribute('aria-pressed', String(next));
+  });
+}
+
 export function initPengaturanPage() {
+  initAutoPrintToggle();
+  initOfflineQueueCard();
   const clearBtn = document.getElementById('clearCacheBtn');
   if (clearBtn) {
     clearBtn.addEventListener('click', async () => {

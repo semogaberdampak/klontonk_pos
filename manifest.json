@@ -13,7 +13,7 @@
   "dir": "ltr",
   "version": "1.1.0",
   "categories": ["business", "productivity"],
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": ["standalone", "window-controls-overlay", "tabbed", "minimal-ui"],
   "prefer_related_applications": false,
   "related_applications": [],
   "launch_handler": { "client_mode": "navigate-existing" },

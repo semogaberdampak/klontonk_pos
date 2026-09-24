@@ -8,6 +8,7 @@ import {
   summarize, balance, cashSuggestions, parseAmount
 } from '../cart.js';
 import { esc, escAttr, formatQty, formatRupiah } from '../format.js';
+import { autoPrint, printReceipt } from '../receipt.js';
 
 // ============ HALAMAN TRANSAKSI (KASIR) ============
 // Alur: pilih barang (cari / scan / ketuk kartu) → keranjang → bayar → struk.
@@ -208,9 +209,10 @@ function receiptSheetHtml(r) {
   return `
     <div class="trx-sheet-body trx-receipt" id="trxSheetBody">
       <div class="trx-r-check">${ICON.check}</div>
-      <h2 class="trx-sheet-title" id="trxSheetTitle">Pembayaran Berhasil</h2>
+      <h2 class="trx-sheet-title" id="trxSheetTitle">${r.pending ? 'Tersimpan Offline' : 'Pembayaran Berhasil'}</h2>
       <p class="trx-r-total">${esc(formatRupiah(r.total))}</p>
       <p class="trx-r-meta">${esc(r.no)}<br>${esc(when)} · ${esc(r.cashier)} · ${esc(r.tenant)}</p>
+      ${r.pending ? '<p class="trx-r-offline" role="status">Belum terkirim ke server. Akan dikirim otomatis saat internet kembali; nomor transaksi resmi terbit setelah itu.</p>' : ''}
       <ul class="trx-r-lines">${rows}</ul>
       <div class="trx-r-summary">
         <div class="trx-r-row"><span>Total (${r.itemCount} barang)</span><span>${esc(formatRupiah(r.total))}</span></div>
@@ -218,6 +220,7 @@ function receiptSheetHtml(r) {
       </div>
     </div>
     <footer class="trx-sheet-foot">
+      <button type="button" class="btn btn-secondary trx-pay-btn" data-print id="trxPrintBtn">Cetak Struk</button>
       <button type="button" class="btn btn-primary trx-pay-btn" data-close id="trxDoneBtn">Transaksi Baru</button>
     </footer>`;
 }
@@ -498,18 +501,22 @@ export function initTransaksiPage() {
     }
 
     const { sale } = result;
-    const summary = summarize(sale.lines);
+    // Baris dari database tidak membawa subtotal (hanya baris keranjang yang punya); hitung di sini agar
+    // jumlah per barang di struk tidak tampil "Rp NaN".
+    const receiptLines = sale.lines.map((line) => ({ ...line, subtotal: line.qty * line.price }));
+    const summary = summarize(receiptLines);
     const receipt = {
       no: sale.no,
       at: new Date(sale.at),
       cashier: sale.cashier,
       tenant: TenantStore.getCurrent().name,
-      lines: sale.lines,
+      lines: receiptLines,
       itemCount: summary.itemCount,
       total: sale.total,
       method: sale.method,
       paid: sale.paid,
-      change: sale.paid - sale.total
+      change: sale.paid - sale.total,
+      pending: !!sale.pending
     };
 
     cart = new Map();
@@ -518,11 +525,13 @@ export function initTransaksiPage() {
     sheet.receipt = receipt;
     renderGrid();
     renderReceiptSheet();
+    if (autoPrint && autoPrint.isOn()) printReceipt(receipt);
   }
 
   function onSheetClick(event) {
     const find = (selector) => event.target.closest(selector);
 
+    if (find('[data-print]')) return printReceipt(sheet.receipt);
     if (find('[data-close]')) return closeSheet();
     if (find('[data-clear]')) return confirmClear();
     if (find('[data-pay]')) return pay();

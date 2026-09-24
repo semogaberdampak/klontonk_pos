@@ -27,7 +27,7 @@ export const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { aut
 // ---------- Hasil query → bentuk seragam ----------
 
 const isNetworkError = (error, status) =>
-  !status && (error.name === 'AuthRetryableFetchError' || /fetch|network|load failed/i.test(error.message || ''));
+  !status && (error.name === 'AuthRetryableFetchError' || /fetch|network|load failed|abort|timeout/i.test(error.message || ''));
 
 function normalize({ data, error, status }) {
   if (!error) return { ok: true, status: status || 200, data };

@@ -11,8 +11,10 @@
 //   4. Darurat (bila aplikasi rusak dan menu Pengaturan tak bisa dibuka):
 //      buka  <alamat-app>/index.html?reset-cache=1
 
-const CACHE_NAME = 'klontonk-pos-v3';
+const CACHE_NAME = 'klontonk-pos-v4';
 const OFFLINE_FALLBACK = './offline.html';
+const PERIODIC_SYNC_TAG = 'refresh-app-shell';
+const OUTBOX_SYNC_TAG = 'flush-sales-outbox'; // harus sama dengan js/pwa.js
 const MAX_ENTRIES = 60;
 const NETWORK_TIMEOUT_MS = 5000;
 const RESET_PARAM = 'reset-cache';
@@ -37,6 +39,8 @@ const PRECACHE = [
   './js/db-status.js',
   './js/format.js',
   './js/icons.js',
+  './js/outbox.js',
+  './js/receipt.js',
   './js/report.js',
   './js/returns.js',
   './js/sales.js',
@@ -45,8 +49,10 @@ const PRECACHE = [
   './js/routes.js',
   './js/scanner.js',
   './js/shell.js',
+  './js/snapshot.js',
   './js/stock.js',
   './js/supabase.js',
+  './js/sync.js',
   './js/tenant.js',
   './js/theme.js',
   './js/ui.js',
@@ -166,6 +172,54 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(networkFirst(event));
+});
+
+// Periodic Background Sync: segarkan app shell di latar belakang agar versi terbaru siap dipakai
+// (hanya jalan pada PWA yang terpasang di Chromium; didaftarkan dari js/pwa.js).
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === PERIODIC_SYNC_TAG) event.waitUntil(precache());
+});
+
+// Background Sync: antrean penjualan offline ada di localStorage dan butuh sesi login, keduanya hanya
+// bisa dijangkau halaman. Jadi SW cukup membangunkan halaman yang terbuka. Bila tidak ada halaman terbuka,
+// event digagalkan agar browser mencoba lagi nanti; saat aplikasi dibuka, antrean tetap dikirim otomatis.
+self.addEventListener('sync', (event) => {
+  if (event.tag !== OUTBOX_SYNC_TAG) return;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      if (!windows.length) throw new Error('Tidak ada halaman terbuka untuk mengirim antrean.');
+      windows.forEach((client) => client.postMessage({ type: 'FLUSH_OUTBOX' }));
+    })
+  );
+});
+
+// Push: sisi penerima. Server pengirim (VAPID + Edge Function) belum ada, jadi belum ada
+// yang berlangganan; handler ini siap menampilkan notifikasi begitu pengirimnya dibuat.
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (err) {
+    payload = { body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title || 'Klontonk POS', {
+      body: payload.body || '',
+      icon: './assets/icons/icon-192.png',
+      data: { url: payload.url || './index.html' }
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data && event.notification.data.url || './index.html', self.location).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((w) => w.url.startsWith(self.registration.scope));
+      return open ? open.focus() : self.clients.openWindow(target);
+    })
+  );
 });
 
 self.addEventListener('message', (event) => {

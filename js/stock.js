@@ -1,5 +1,6 @@
 import { TenantStore } from './tenant.js';
 import { db, run, fetchAll, describeResult } from './supabase.js';
+import { snapshots } from './snapshot.js';
 
 // Stok & harga per tenant, disimpan di tabel `stock_items` di Supabase (db/schema.sql).
 // Di browser hanya ada salinan yang dimuat saat aplikasi dibuka (StockStore.load). Perubahan langsung
@@ -9,6 +10,7 @@ import { db, run, fetchAll, describeResult } from './supabase.js';
 // Validasi dilakukan di sini (untuk tampilan) dan diulang oleh batasan database.
 const TABLE = 'stock_items';
 const COLUMNS = 'tenant_id,id,name,qty,unit,barcode,price';
+const SNAPSHOT_NAME = 'stock';
 const MAX_QTY = 1000000;
 export const MAX_PRICE = 100000000;
 // Ambang "stok menipis" — dipakai Stok Total dan Beranda supaya definisinya satu tempat.
@@ -34,6 +36,7 @@ function read() {
 
 function commit(items) {
   data = { ...data, [tenantId()]: items };
+  snapshots?.save(SNAPSHOT_NAME, data); // agar aplikasi yang dibuka offline melihat stok terbaru
 }
 
 // Baris database → bentuk yang dipakai aplikasi (field kosong dihilangkan).
@@ -111,13 +114,22 @@ export const StockStore = {
   },
 
   // Muat stok dari database (RLS: admin semua tenant, kasir hanya tenant sendiri). Dipanggil saat aplikasi
-  // dibuka (setelah login) dan setelah simpanan ditolak.
+  // dibuka (setelah login) dan setelah simpanan ditolak. Bila tidak ada jaringan dan ada salinan terakhir di
+  // perangkat, salinan itu dipakai: { success: true, offline: true, at } agar penjualan tetap bisa dicatat.
   async load() {
     const result = await fetchAll(() => db.from(TABLE).select(COLUMNS).order('created_at').order('name'));
-    if (!result.ok) return { success: false, error: describe(result), expired: !!result.expired };
+    if (!result.ok) {
+      const saved = result.code === 'network' ? snapshots?.load(SNAPSHOT_NAME) : null;
+      if (saved) {
+        data = saved.data;
+        return { success: true, offline: true, at: saved.at };
+      }
+      return { success: false, error: describe(result), expired: !!result.expired };
+    }
     const grouped = Object.fromEntries(TenantStore.getAll().map((tenant) => [tenant.id, []]));
     for (const row of result.data) (grouped[row.tenant_id] ||= []).push(toItem(row));
     data = grouped;
+    snapshots?.save(SNAPSHOT_NAME, data);
     return { success: true };
   },
 
