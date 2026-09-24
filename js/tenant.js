@@ -1,4 +1,4 @@
-import { rest } from './supabase.js';
+import { db, run, describeResult } from './supabase.js';
 
 /**
  * Multi-Tenancy Layer
@@ -12,11 +12,6 @@ const FALLBACK_TENANTS = [
   { id: 'T002', name: 'Warung Merah' },
   { id: 'T003', name: 'Warung Putih' }
 ];
-
-function describe(result) {
-  if (result.expired) return 'Sesi berakhir. Silakan login ulang.';
-  return result.message;
-}
 
 export const TenantStore = {
   _tenants: FALLBACK_TENANTS,
@@ -38,8 +33,8 @@ export const TenantStore = {
   // Muat daftar tenant dari Supabase. Dipanggil setelah login, sebelum StockStore/SalesStore/ReturnStore
   // dimuat (ketiganya memakai getAll() untuk mengelompokkan data per tenant).
   async load() {
-    const result = await rest('tenants?select=id,name&order=id');
-    if (!result.ok) return { success: false, error: describe(result), expired: !!result.expired };
+    const result = await run(db.from('tenants').select('id,name').order('id'));
+    if (!result.ok) return { success: false, error: describeResult(result), expired: !!result.expired };
     if (!result.data.length) return { success: false, error: 'Daftar tenant kosong.' };
 
     this._tenants = result.data;

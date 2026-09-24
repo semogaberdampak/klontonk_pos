@@ -1,6 +1,6 @@
 import { UI } from './ui.js';
 import { EMAIL_DOMAIN } from './config.js';
-import { rest, rpc, signIn, signOut, signUpDetached, hasSession, clearSession } from './supabase.js';
+import { db, run, signIn, signOut, signUpDetached, hasSession } from './supabase.js';
 
 // ============ AUTHENTICATION SYSTEM ============
 //
@@ -223,7 +223,7 @@ class AuthManager {
       }
 
       // Tanpa sesi Supabase, data tidak bisa diambil: minta login ulang.
-      if (!hasSession()) {
+      if (!(await hasSession())) {
         this._clearSession();
         return;
       }
@@ -247,7 +247,7 @@ class AuthManager {
     this.currentUser = null;
     _storageRemove(SESSION_KEY);
     _storageRemove(ACTIVITY_KEY);
-    clearSession();
+    signOut();
   }
 
   // Update aktivitas terakhir (dengan throttle 5 detik agar efisien)
@@ -337,7 +337,7 @@ class AuthManager {
     }
 
     // Akun Supabase Auth tanpa profil (mis. mendaftar sendiri) tidak punya akses apa pun.
-    const found = await rest(`profiles?select=${PROFILE_COLUMNS}&id=eq.${result.data.user.id}`);
+    const found = await run(db.from('profiles').select(PROFILE_COLUMNS).eq('id', result.data.user.id));
     if (!found.ok || !found.data.length) {
       await signOut();
       return { success: false, error: found.ok ? 'Akun ini belum diberi akses. Hubungi admin.' : found.message };
@@ -385,7 +385,7 @@ class AuthManager {
   async listUsers() {
     const guard = this._requireAdmin();
     if (!guard.ok) return { success: false, error: guard.error };
-    const result = await rest(`profiles?select=${PROFILE_COLUMNS}&order=created_at,username`);
+    const result = await run(db.from('profiles').select(PROFILE_COLUMNS).order('created_at').order('username'));
     return this._adminResult(result, (data) => ({ users: data }));
   }
 
@@ -409,7 +409,7 @@ class AuthManager {
     if (!['admin', 'cashier'].includes(role)) return fail('Role tidak valid.');
     if (!/^T\d{3}$/.test(String(tenant))) return fail('Tenant tidak valid.');
 
-    const taken = await rest(`profiles?select=id&username=eq.${uname}`);
+    const taken = await run(db.from('profiles').select('id').eq('username', uname));
     if (!taken.ok) return this._adminResult(taken, () => ({}));
     if (taken.data.length) return fail('Username sudah digunakan.');
 
@@ -429,7 +429,7 @@ class AuthManager {
       avatar: Array.from(fullName)[0].toUpperCase(),
       tenant_id: String(tenant)
     };
-    const saved = await rest('profiles', { method: 'POST', body: profile, headers: { Prefer: 'return=minimal' } });
+    const saved = await run(db.from('profiles').insert(profile));
     if (!saved.ok) return this._adminResult(saved, () => ({}));
     return { success: true, user: { id: profile.id, username: uname, name: fullName, role, avatar: profile.avatar, tenant: profile.tenant_id } };
   }
@@ -439,7 +439,7 @@ class AuthManager {
     const guard = this._requireAdmin();
     if (!guard.ok) return { success: false, error: guard.error };
     const uname = String(username || '').trim().toLowerCase();
-    return this._adminResult(await rpc('delete_app_user', { p_username: uname }), () => ({}));
+    return this._adminResult(await run(db.rpc('delete_app_user', { p_username: uname })), () => ({}));
   }
 
   // Logout

@@ -110,6 +110,31 @@ CREATE INDEX IF NOT EXISTS stock_returns_at_idx   ON stock_returns (tenant_id, a
 CREATE INDEX IF NOT EXISTS stock_returns_item_idx ON stock_returns (tenant_id, item_id, kind);
 
 -- ---------------------------------------------------------------------------
+-- Info Update: daftar perubahan aplikasi & info maintenance (popup sapaan + menu Info Update).
+-- Semua user login boleh membaca; hanya admin yang boleh menambah / mengubah / menghapus.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS app_updates (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  kind        text NOT NULL CHECK (kind IN ('update', 'maintenance')),
+  title       text NOT NULL CHECK (char_length(title) BETWEEN 1 AND 80),
+  description text CHECK (description IS NULL OR char_length(description) <= 300),
+  color       text NOT NULL DEFAULT '#0060AF' CHECK (color ~ '^#[0-9A-Fa-f]{6}$'),
+  sort_order  integer NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO app_updates (kind, title, description, color, sort_order)
+SELECT * FROM (VALUES
+  ('update', 'Mode Terang Baru', 'Palet krem hangat yang lebih nyaman dibaca sepanjang hari.', '#16A34A', 1),
+  ('update', 'Tombol Logout Lebih Kontras', 'Sekarang tampil solid merah — lebih mudah ditemukan, lebih sulit salah tekan.', '#DC2626', 2),
+  ('update', 'Perbaikan Menu Stok', 'Sub-menu Stok tidak lagi tertutup sendiri saat dibuka di layar kecil.', '#0060AF', 3),
+  ('update', 'Navigasi Multi-Tenant', 'Pindah antar cabang tetap ringan langsung dari header.', '#F59E0B', 4),
+  ('maintenance', 'Maintenance Terjadwal', 'Minggu, 02.00–03.00 WIB — sebagian fitur mungkin tidak tersedia sementara.', '#0060AF', 1),
+  ('maintenance', 'Roadmap Berikutnya', 'Laporan kasir cetak dan sinkronisasi stok antar cabang.', '#0060AF', 2)
+) AS seed(kind, title, description, color, sort_order)
+WHERE NOT EXISTS (SELECT 1 FROM app_updates);
+
+-- ---------------------------------------------------------------------------
 -- Pembantu RLS: peran pemanggil dan akses tenant, dibaca dari profil (bukan dari token).
 -- SECURITY DEFINER agar bisa membaca `profiles` tanpa terkena RLS-nya sendiri.
 -- ---------------------------------------------------------------------------
@@ -131,9 +156,20 @@ ALTER TABLE stock_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sales       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sale_lines  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_returns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_updates ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS tenants_read ON tenants;
 CREATE POLICY tenants_read ON tenants FOR SELECT TO authenticated USING (public.app_role() IS NOT NULL);
+
+DROP POLICY IF EXISTS updates_read ON app_updates;
+CREATE POLICY updates_read ON app_updates FOR SELECT TO authenticated USING (public.app_role() IS NOT NULL);
+DROP POLICY IF EXISTS updates_admin_insert ON app_updates;
+CREATE POLICY updates_admin_insert ON app_updates FOR INSERT TO authenticated WITH CHECK (public.app_role() = 'admin');
+DROP POLICY IF EXISTS updates_admin_update ON app_updates;
+CREATE POLICY updates_admin_update ON app_updates FOR UPDATE TO authenticated
+  USING (public.app_role() = 'admin') WITH CHECK (public.app_role() = 'admin');
+DROP POLICY IF EXISTS updates_admin_delete ON app_updates;
+CREATE POLICY updates_admin_delete ON app_updates FOR DELETE TO authenticated USING (public.app_role() = 'admin');
 
 DROP POLICY IF EXISTS profiles_read ON profiles;
 CREATE POLICY profiles_read ON profiles FOR SELECT TO authenticated
@@ -167,6 +203,7 @@ REVOKE ALL ON tenants, profiles, stock_items, sales, sale_lines, stock_returns F
 GRANT SELECT ON tenants, sales, sale_lines, stock_returns TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON profiles TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON stock_items TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_updates TO authenticated;
 
 -- ---------------------------------------------------------------------------
 -- checkout(): satu transaksi penjualan yang atomik.

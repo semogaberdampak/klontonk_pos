@@ -1,22 +1,19 @@
-import { StockStore } from '../stock.js';
+import { StockStore, LOW_STOCK_MAX } from '../stock.js';
 import { SalesStore } from '../sales.js';
 import { TenantStore } from '../tenant.js';
 import { UI } from '../ui.js';
 import { scanBarcode } from '../scanner.js';
 import {
-  MAX_PAYMENT, formatRupiah, isSellable, changeQty, removeLine, buildLines, sanitizeCart,
+  MAX_PAYMENT, isSellable, changeQty, removeLine, buildLines, sanitizeCart,
   summarize, balance, cashSuggestions, parseAmount
 } from '../cart.js';
+import { esc, escAttr, formatQty, formatRupiah } from '../format.js';
 
 // ============ HALAMAN TRANSAKSI (KASIR) ============
 // Alur: pilih barang (cari / scan / ketuk kartu) → keranjang → bayar → struk.
 // Barang & harga dari Stok Awal / Update Harga. Stok berkurang saat pembayaran berhasil
 // dan penjualan dicatat lewat SalesStore.checkout (satu transaksi di database: kurangi stok + catat penjualan).
 
-const esc = (value) => UI._escape(String(value ?? ''));
-const escAttr = (value) => esc(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-const formatQty = (qty) => Number(qty).toLocaleString('id-ID');
-const LOW_STOCK = 5;
 const SHEET_CLOSE_MS = 220;
 
 const svg = (body, size = 20, width = 2) =>
@@ -56,7 +53,7 @@ function cardHtml(item, inCart) {
   let stockClass = '';
   let stockText = `Stok ${formatQty(item.qty)} ${item.unit}`;
   if (soldOut) { stockClass = ' is-out'; stockText = 'Stok habis'; }
-  else if (item.qty <= LOW_STOCK) stockClass = ' is-low';
+  else if (item.qty <= LOW_STOCK_MAX) stockClass = ' is-low';
 
   const badge = inCart ? `<span class="trx-card-badge" aria-hidden="true">${inCart}</span>` : '';
   const label = sellable

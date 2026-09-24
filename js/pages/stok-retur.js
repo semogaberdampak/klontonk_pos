@@ -1,22 +1,19 @@
 import { StockStore } from '../stock.js';
 import { TenantStore } from '../tenant.js';
 import { ReturnStore, KINDS, REASONS, MAX_NOTE, customerReturnLimits } from '../returns.js';
-import { formatRupiah } from '../cart.js';
 import { UI } from '../ui.js';
+import { esc, formatQty, formatWhen, formatRupiah } from '../format.js';
 
 // ============ HALAMAN STOK RETUR ============
 // Proses retur (dari pelanggan / ke supplier) dan riwayatnya untuk tenant aktif.
 // Perhitungan dan aturan sebenarnya dijalankan database (process_return); halaman ini lapisan tampilan.
 
-const esc = (value) => UI._escape(String(value ?? ''));
-const formatQty = (qty) => Number(qty).toLocaleString('id-ID');
 const HISTORY_LIMIT = 20;
 const KIND_SHORT = { pelanggan: 'Pelanggan', supplier: 'Supplier' };
 const REASON_LABEL = Object.fromEntries(Object.values(REASONS).flat().map((r) => [r.id, r.label]));
 
 let kind = 'pelanggan';
 
-const formatWhen = (iso) => new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 // Ringkasan bulan ini (waktu lokal).
 function monthStats(returns) {

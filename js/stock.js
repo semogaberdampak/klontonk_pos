@@ -1,5 +1,5 @@
 import { TenantStore } from './tenant.js';
-import { rest, fetchAll } from './supabase.js';
+import { db, run, fetchAll, describeResult } from './supabase.js';
 
 // Stok & harga per tenant, disimpan di tabel `stock_items` di Supabase (db/schema.sql).
 // Di browser hanya ada salinan yang dimuat saat aplikasi dibuka (StockStore.load). Perubahan langsung
@@ -26,16 +26,15 @@ const saveErrorHandlers = new Set();
 
 const newId = () => 'stk_' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
 
+const tenantId = () => TenantStore.getCurrent().id;
+
 function read() {
-  return data[TenantStore.getCurrent().id] || [];
+  return data[tenantId()] || [];
 }
 
 function commit(items) {
-  data = { ...data, [TenantStore.getCurrent().id]: items };
+  data = { ...data, [tenantId()]: items };
 }
-
-const enc = encodeURIComponent;
-const rowKey = (id) => `tenant_id=eq.${TenantStore.getCurrent().id}&id=eq.${enc(id)}`;
 
 // Baris database → bentuk yang dipakai aplikasi (field kosong dihilangkan).
 const toItem = ({ id, name, qty, unit, barcode, price }) => ({
@@ -44,27 +43,22 @@ const toItem = ({ id, name, qty, unit, barcode, price }) => ({
   ...(price !== null && { price })
 });
 
-// Tambah atau ganti satu barang (upsert menurut kunci tenant_id + id).
-const upsert = (item) => rest(`${TABLE}?on_conflict=tenant_id,id`, {
-  method: 'POST',
-  headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-  body: {
-    tenant_id: TenantStore.getCurrent().id,
-    id: item.id,
-    name: item.name,
-    qty: item.qty,
-    unit: item.unit,
-    barcode: item.barcode || null,
-    price: item.price ?? null
-  }
-});
+// Tambah atau ganti satu barang (upsert menurut kunci tenant_id + id). Tenant ditangkap saat perubahan dibuat,
+// bukan saat antrean simpan berjalan.
+const upsert = (tenant, item) => run(db.from(TABLE).upsert({
+  tenant_id: tenant,
+  id: item.id,
+  name: item.name,
+  qty: item.qty,
+  unit: item.unit,
+  barcode: item.barcode || null,
+  price: item.price ?? null
+}, { onConflict: 'tenant_id,id' }));
 
-function describe(result) {
-  if (result.code === '23505') return 'Nama atau barcode sudah dipakai barang lain.';
-  if (result.status === 403 || result.code === '42501') return 'Tidak punya akses untuk perubahan ini.';
-  if (result.expired) return 'Sesi berakhir. Silakan login ulang.';
-  return result.message;
-}
+const describe = (result) => describeResult(result, {
+  byCode: { 23505: 'Nama atau barcode sudah dipakai barang lain.' },
+  forbidden: 'Tidak punya akses untuk perubahan ini.'
+});
 
 // Kirim perubahan secara berurutan. Bila ditolak: beri tahu, lalu samakan dengan database.
 function persist(send) {
@@ -119,7 +113,7 @@ export const StockStore = {
   // Muat stok dari database (RLS: admin semua tenant, kasir hanya tenant sendiri). Dipanggil saat aplikasi
   // dibuka (setelah login) dan setelah simpanan ditolak.
   async load() {
-    const result = await fetchAll(`${TABLE}?select=${COLUMNS}&order=created_at,name`);
+    const result = await fetchAll(() => db.from(TABLE).select(COLUMNS).order('created_at').order('name'));
     if (!result.ok) return { success: false, error: describe(result), expired: !!result.expired };
     const grouped = Object.fromEntries(TenantStore.getAll().map((tenant) => [tenant.id, []]));
     for (const row of result.data) (grouped[row.tenant_id] ||= []).push(toItem(row));
@@ -143,9 +137,10 @@ export const StockStore = {
     const checked = validate(input, items, null);
     if (!checked.ok) return { success: false, error: checked.error };
 
+    const tenant = tenantId();
     const item = { id: newId(), ...checked.value };
     commit([...items, item]);
-    persist(() => upsert(item));
+    persist(() => upsert(tenant, item));
     return { success: true, item };
   },
 
@@ -156,18 +151,20 @@ export const StockStore = {
     const checked = validate(input, items, id);
     if (!checked.ok) return { success: false, error: checked.error };
 
+    const tenant = tenantId();
     const next = items.map(i => (i.id === id ? { ...i, ...checked.value } : i));
     commit(next);
     const item = next.find(i => i.id === id);
-    persist(() => upsert(item));
+    persist(() => upsert(tenant, item));
     return { success: true, item };
   },
 
   remove(id) {
     const items = read();
     if (!items.some(i => i.id === id)) return { success: false, error: 'Barang tidak ditemukan.' };
+    const tenant = tenantId();
     commit(items.filter(i => i.id !== id));
-    persist(() => rest(`${TABLE}?${rowKey(id)}`, { method: 'DELETE' }));
+    persist(() => run(db.from(TABLE).delete().eq('tenant_id', tenant).eq('id', id)));
     return { success: true };
   },
 
@@ -184,10 +181,10 @@ export const StockStore = {
       return { success: false, error: 'Harga harus bilangan bulat Rp 1 – Rp 100.000.000.' };
     }
 
+    const tenant = tenantId();
     const next = items.map(i => (i.id === id ? { ...i, price } : i));
     commit(next);
-    const key = rowKey(id);
-    persist(() => rest(`${TABLE}?${key}`, { method: 'PATCH', body: { price } }));
+    persist(() => run(db.from(TABLE).update({ price }).eq('tenant_id', tenant).eq('id', id)));
     return { success: true, item: next.find(i => i.id === id) };
   },
 

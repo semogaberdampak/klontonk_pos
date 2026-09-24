@@ -4,8 +4,6 @@
 
 export const MAX_PAYMENT = 1000000000;
 
-export const formatRupiah = (amount) => 'Rp ' + Number(amount).toLocaleString('id-ID');
-
 // Barang bisa dijual bila punya harga dan masih ada stok.
 export const isSellable = (item) =>
   Number.isInteger(item.price) && item.price > 0 && Number.isInteger(item.qty) && item.qty > 0;

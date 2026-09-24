@@ -1,15 +1,12 @@
 import { StockStore, MAX_PRICE } from '../stock.js';
 import { TenantStore } from '../tenant.js';
 import { UI } from '../ui.js';
+import { esc, escAttr, formatQty, formatRupiah } from '../format.js';
 
 // ============ HALAMAN UPDATE HARGA ============
 // Daftar barang diambil dari Stok Awal. Tiap baris punya tombol Edit untuk
 // mengisi harga, lalu Simpan. Validasi sebenarnya ada di StockStore.setPrice.
 
-const esc = (value) => UI._escape(String(value ?? ''));
-const escAttr = (value) => esc(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-const formatRupiah = (amount) => 'Rp ' + Number(amount).toLocaleString('id-ID');
-const formatQty = (qty) => Number(qty).toLocaleString('id-ID');
 const hasPrice = (item) => Number.isInteger(item.price) && item.price > 0;
 
 const ICON_EDIT = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>';

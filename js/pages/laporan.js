@@ -3,21 +3,17 @@ import { SalesStore } from '../sales.js';
 import { ReturnStore, REASONS } from '../returns.js';
 import { TenantStore } from '../tenant.js';
 import { Auth } from '../auth.js';
-import { formatRupiah } from '../cart.js';
 import { PERIODS, periodRange, periodLabel, containsDate, aggregate } from '../report.js';
-import { UI } from '../ui.js';
+import { esc, formatQty, formatWhen, formatRupiah } from '../format.js';
 
 // ============ HALAMAN LAPORAN ============
 // Empat laporan siap cetak, dibuka lewat sheet "Menu Laporan": Stok Awal, Stok Keluar (Laku),
 // Stok Retur, Stok Total. Semuanya hanya membaca data yang sudah dimuat (StockStore/SalesStore/
 // ReturnStore) — tidak ada panggilan jaringan tambahan. Tombol Cetak memakai window.print().
 
-const esc = (value) => UI._escape(String(value ?? ''));
-const formatQty = (qty) => Number(qty).toLocaleString('id-ID');
 const REASON_LABEL = Object.fromEntries(Object.values(REASONS).flat().map((r) => [r.id, r.label]));
 
 const now = () => new Date().toLocaleString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-const formatWhen = (iso) => new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 // Periode aktif per laporan (bertahan selama sesi, selalu periode berjalan — laporan cetak, bukan penjelajah riwayat).
 let kindKeluar = 'harian';

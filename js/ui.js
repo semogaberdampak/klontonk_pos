@@ -1,3 +1,4 @@
+import { esc } from './format.js';
 /**
  * Custom UI Components
  * Pengganti alert/confirm/prompt bawaan browser
@@ -299,8 +300,6 @@ export const UI = {
   },
   
   _escape(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    return esc(str);
   }
 };

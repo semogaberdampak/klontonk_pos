@@ -1,7 +1,8 @@
 import { TenantStore } from './tenant.js';
 import { StockStore } from './stock.js';
 import { SalesStore } from './sales.js';
-import { rpc, fetchAll } from './supabase.js';
+import { db, run, fetchAll, describeResult } from './supabase.js';
+import { isoMillis } from './format.js';
 
 // Retur stok per tenant, disimpan di tabel `stock_returns` di Supabase (db/schema.sql).
 //   pelanggan: barang dikembalikan pembeli → stok BERTAMBAH, ada nilai pengembalian uang.
@@ -38,17 +39,12 @@ const SELECT = 'tenant_id,no,at,cashier,kind,item_id,name,unit,qty,amount,reason
 let data = {}; // { T001: [retur...], ... } — salinan dari database
 
 const currentReturns = () => data[TenantStore.getCurrent().id] || [];
-const isoMillis = (at) => String(at).replace(/(\.\d{3})\d+/, '$1');
 
 const toReturn = ({ no, at, cashier, kind, item_id, name, unit, qty, amount, reason, note }) => ({
   no, at: isoMillis(at), cashier, kind, id: item_id, name, unit, qty, amount, reason, note
 });
 
-function describe(result) {
-  if (result.expired) return 'Sesi berakhir. Silakan login ulang.';
-  if (result.status === 403 || result.code === '42501') return 'Tidak punya akses untuk retur ini.';
-  return result.message;
-}
+const describe = (result) => describeResult(result, { forbidden: 'Tidak punya akses untuk retur ini.' });
 
 // Jumlah per barang: yang pernah terjual dan yang sudah diretur pelanggan (tenant aktif).
 // Retur pelanggan berikutnya dibatasi sold - returned.
@@ -65,7 +61,7 @@ export function customerReturnLimits() {
 
 export const ReturnStore = {
   async load() {
-    const result = await fetchAll(`stock_returns?select=${SELECT}&order=at.asc,no.asc`);
+    const result = await fetchAll(() => db.from('stock_returns').select(SELECT).order('at').order('no'));
     if (!result.ok) return { success: false, error: describe(result), expired: !!result.expired };
     const grouped = Object.fromEntries(TenantStore.getAll().map((tenant) => [tenant.id, []]));
     for (const row of result.data) (grouped[row.tenant_id] ||= []).push(toReturn(row));
@@ -81,14 +77,14 @@ export const ReturnStore = {
   // input: { kind, itemId, qty, reason, note }. Mengembalikan { success: true, ret, stockAfter } atau { success: false, error }.
   async process({ kind, itemId, qty, reason, note }) {
     const tenant = TenantStore.getCurrent().id;
-    const result = await rpc('process_return', {
+    const result = await run(db.rpc('process_return', {
       p_tenant: tenant,
       p_kind: kind,
       p_item_id: itemId,
       p_qty: qty,
       p_reason: reason,
       p_note: note || null
-    });
+    }));
     if (!result.ok) return { success: false, error: describe(result) };
 
     const ret = toReturn(result.data);

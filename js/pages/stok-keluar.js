@@ -1,15 +1,12 @@
 import { SalesStore } from '../sales.js';
 import { TenantStore } from '../tenant.js';
-import { UI } from '../ui.js';
-import { formatRupiah } from '../cart.js';
 import { PERIODS, periodRange, shiftAnchor, periodLabel, containsDate, aggregate } from '../report.js';
+import { esc, formatQty, formatRupiah } from '../format.js';
 
 // ============ HALAMAN STOK KELUAR — LAKU ============
 // Laporan barang yang keluar karena penjualan kasir, per hari / minggu / bulan.
 // Data dari SalesStore (riwayat penjualan); halaman ini hanya membaca.
 
-const esc = (value) => UI._escape(String(value ?? ''));
-const formatQty = (qty) => Number(qty).toLocaleString('id-ID');
 const INITIAL_TRX_ROWS = 8;
 
 const CURRENT_TEXT = { harian: 'Hari ini', mingguan: 'Minggu ini', bulanan: 'Bulan ini' };

@@ -2,15 +2,12 @@ import { TenantStore } from '../tenant.js';
 import { StockStore, LOW_STOCK_MAX } from '../stock.js';
 import { SalesStore } from '../sales.js';
 import { ReturnStore } from '../returns.js';
-import { formatRupiah } from '../cart.js';
-import { UI } from '../ui.js';
+import { esc, formatQty, formatRupiah } from '../format.js';
 
 // ============ HALAMAN BERANDA ============
 // Statistik dan aktivitas nyata dari data yang sudah dimuat (StockStore/SalesStore/ReturnStore),
 // tanpa panggilan jaringan tambahan. Tidak ada data contoh/tetap di sini.
 
-const esc = (value) => UI._escape(String(value ?? ''));
-const formatQty = (qty) => Number(qty).toLocaleString('id-ID');
 const isSameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
 function relativeTime(iso) {

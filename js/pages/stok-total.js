@@ -1,14 +1,11 @@
 import { StockStore, LOW_STOCK_MAX } from '../stock.js';
 import { SalesStore } from '../sales.js';
 import { TenantStore } from '../tenant.js';
-import { UI } from '../ui.js';
+import { esc, formatQty } from '../format.js';
 
 // ============ HALAMAN STOK TOTAL ============
 // Sisa stok terakhir per barang. StockStore sudah dikurangi otomatis tiap transaksi kasir,
 // jadi jumlah di sini = stok setelah semua penjualan. Halaman ini hanya membaca.
-
-const esc = (value) => UI._escape(String(value ?? ''));
-const formatQty = (qty) => Number(qty).toLocaleString('id-ID');
 
 const FILTERS = [
   { id: 'semua', label: 'Semua' },
