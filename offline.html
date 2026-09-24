@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <title>Offline - Klontonk POS</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box;
+           background: #EBE4DB; color: #2b2622; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; text-align: center; }
+    main { max-width: 360px; }
+    h1 { font-size: 1.4rem; margin: 0 0 8px; }
+    p { margin: 0 0 20px; line-height: 1.5; }
+    button { font: inherit; padding: 12px 24px; border: 0; border-radius: 12px; background: #2b2622; color: #fff; cursor: pointer; }
+    button:focus-visible { outline: 3px solid #b8860b; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Anda sedang offline</h1>
+    <p>Halaman ini belum tersimpan di perangkat. Sambungkan internet lalu coba lagi.</p>
+    <button type="button" onclick="location.reload()">Coba lagi</button>
+  </main>
+</body>
+</html>

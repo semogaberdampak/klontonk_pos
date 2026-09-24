@@ -11,7 +11,8 @@
 //   4. Darurat (bila aplikasi rusak dan menu Pengaturan tak bisa dibuka):
 //      buka  <alamat-app>/index.html?reset-cache=1
 
-const CACHE_NAME = 'klontonk-pos-v2';
+const CACHE_NAME = 'klontonk-pos-v3';
+const OFFLINE_FALLBACK = './offline.html';
 const MAX_ENTRIES = 60;
 const NETWORK_TIMEOUT_MS = 5000;
 const RESET_PARAM = 'reset-cache';
@@ -21,6 +22,7 @@ const RESET_PARAM = 'reset-cache';
 const PRECACHE = [
   './',
   './index.html',
+  OFFLINE_FALLBACK,
   './manifest.json',
   './css/styles.css',
   './assets/fonts/plus-jakarta-sans-latin.woff2',
@@ -116,6 +118,8 @@ async function networkFirst(event) {
     if (request.mode === 'navigate') {
       const shell = await caches.match('./index.html');
       if (shell) return shell;
+      const offlinePage = await caches.match(OFFLINE_FALLBACK);
+      if (offlinePage) return offlinePage;
     }
     return new Response('Offline', {
       status: 503,
@@ -167,6 +171,11 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   const reply = (payload) => event.ports && event.ports[0] && event.ports[0].postMessage(payload);
+
+  if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
 
   if (data.type === 'CLEAR_CACHE') {
     event.waitUntil(
