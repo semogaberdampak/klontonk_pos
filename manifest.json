@@ -10,8 +10,31 @@
   "background_color": "#EBE4DB",
   "theme_color": "#FFFFFF",
   "lang": "id",
+  "dir": "ltr",
   "version": "1.1.0",
   "categories": ["business", "productivity"],
+  "display_override": ["standalone", "minimal-ui"],
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "launch_handler": { "client_mode": "navigate-existing" },
+  "handle_links": "preferred",
+  "edge_side_panel": { "preferred_width": 480 },
+  "screenshots": [
+    {
+      "src": "assets/screenshots/wide-login.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Halaman masuk Klontonk POS di layar lebar"
+    },
+    {
+      "src": "assets/screenshots/narrow-login.png",
+      "sizes": "540x960",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Halaman masuk Klontonk POS di layar ponsel"
+    }
+  ],
   "icons": [
     {
       "src": "assets/icons/icon-192.png",
