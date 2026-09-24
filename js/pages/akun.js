@@ -91,6 +91,11 @@ export function renderPengaturanPage() {
       </div>
     </div>
     <div class="activity-card" style="padding: 24px; margin-top: 16px;">
+      <h2 class="section-title" style="margin-bottom:12px;">Catatan Kasir</h2>
+      <p class="field-hint" style="margin-bottom:12px;">Catatan singkat untuk serah terima shift. Tersimpan di perangkat ini.</p>
+      <button type="button" class="btn btn-secondary btn-large" data-navigate="#/catatan">Buka Catatan</button>
+    </div>
+    <div class="activity-card" style="padding: 24px; margin-top: 16px;">
       <h2 class="section-title" style="margin-bottom:12px;">Struk</h2>
       <div class="account-rows" style="margin-bottom:12px;">
         <div class="account-row" style="border-bottom:none;">

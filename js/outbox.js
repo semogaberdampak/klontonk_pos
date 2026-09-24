@@ -7,7 +7,7 @@
 //     method: 'tunai' | 'nontunai', paid, expectedTotal (total pada struk offline),
 //     lines: [{ id, name, unit, qty, price }], status: 'pending' | 'failed', attempts, error }
 
-export const OUTBOX_KEY = 'klontonk:outbox:v1';
+const OUTBOX_KEY = 'klontonk:outbox:v1';
 export const MAX_PENDING = 200;
 
 const METHODS = ['tunai', 'nontunai'];

@@ -9,6 +9,7 @@ import { renderStokKeluarPage, initStokKeluarPage } from './pages/stok-keluar.js
 import { renderStokTotalPage, initStokTotalPage } from './pages/stok-total.js';
 import { renderStokReturPage, initStokReturPage } from './pages/stok-retur.js';
 import { renderInfoUpdatePage, initInfoUpdatePage } from './pages/info-update.js';
+import { renderCatatanPage, initCatatanPage } from './pages/catatan.js';
 import { renderAkunPage, renderPengaturanPage, initPengaturanPage } from './pages/akun.js';
 import {
   renderLaporanStokAwalPage, initLaporanStokAwalPage,
@@ -29,12 +30,24 @@ const page = (render, init) => () => {
 // Guard: halaman admin ditolak untuk non-admin (dicek ulang tiap route diakses).
 const adminOnly = (render, init) => () => (Auth.isAdmin() ? page(render, init)() : forbiddenPage());
 
-function forbiddenPage() {
+// Halaman input stok / harga: hanya akun tenant. Admin hanya membaca stok (dashboard admin terpisah).
+const TENANT_ONLY_TEXT = {
+  subtitle: 'Stok tenant hanya bisa diinput oleh tenant itu sendiri.',
+  title: 'Khusus Akun Tenant',
+  hint: 'Akun admin hanya dapat melihat stok. Masuk dengan akun tenant untuk mengubahnya.'
+};
+const tenantOnly = (render, init) => () => (Auth.canEditStock() ? page(render, init)() : forbiddenPage(TENANT_ONLY_TEXT));
+
+function forbiddenPage({
+  subtitle = 'Halaman ini hanya dapat diakses oleh Admin.',
+  title = 'Butuh Hak Akses Admin',
+  hint = 'Jika Anda merasa ini keliru, hubungi admin pusat Anda.'
+} = {}) {
   return `
     <div class="page-header">
       <p class="greeting">Akses Ditolak</p>
       <h1 class="page-title">403</h1>
-      <p class="page-subtitle">Halaman ini hanya dapat diakses oleh Admin.</p>
+      <p class="page-subtitle">${subtitle}</p>
     </div>
     <div class="activity-card" style="text-align:center; padding: 40px 20px;">
       <div style="width:64px;height:64px;border-radius:var(--radius-lg);background:rgba(220,38,38,0.12);color:var(--color-danger);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
@@ -43,9 +56,9 @@ function forbiddenPage() {
           <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
         </svg>
       </div>
-      <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;">Butuh Hak Akses Admin</h3>
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;">${title}</h3>
       <p style="font-size:13px;color:var(--text-secondary);max-width:320px;margin:0 auto;">
-        Jika Anda merasa ini keliru, hubungi admin pusat Anda.
+        ${hint}
       </p>
     </div>
   `;
@@ -73,12 +86,13 @@ export function startRouter() {
     .add('/kasir', page(renderTransaksiPage, initTransaksiPage))
     .add('/akun', renderAkunPage)
     .add('/pengaturan', page(renderPengaturanPage, initPengaturanPage))
-    .add('/stok/awal', page(renderStokAwalPage, initStokAwalPage))
+    .add('/stok/awal', tenantOnly(renderStokAwalPage, initStokAwalPage))
     .add('/stok/keluar-laku', page(renderStokKeluarPage, initStokKeluarPage))
     .add('/stok/retur', page(renderStokReturPage, initStokReturPage))
     .add('/stok/total', page(renderStokTotalPage, initStokTotalPage))
     .add('/info-update', page(renderInfoUpdatePage, initInfoUpdatePage))
-    .add('/harga', page(renderHargaPage, initHargaPage))
+    .add('/catatan', page(renderCatatanPage, initCatatanPage))
+    .add('/harga', tenantOnly(renderHargaPage, initHargaPage))
     .add('/laporan/stok-awal', page(renderLaporanStokAwalPage, initLaporanStokAwalPage))
     .add('/laporan/stok-keluar', page(renderLaporanStokKeluarPage, initLaporanStokKeluarPage))
     .add('/laporan/stok-retur', page(renderLaporanStokReturPage, initLaporanStokReturPage))

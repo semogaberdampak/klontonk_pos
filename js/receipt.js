@@ -3,7 +3,7 @@ import { browserStorage } from './snapshot.js';
 
 // Cetak struk penjualan. Struk dicetak lewat dialog cetak browser (window.print), jadi bisa ke printer
 // thermal yang terpasang di perangkat lewat drivernya, ke printer biasa, atau "Simpan sebagai PDF".
-// Tata letak 58 mm (ukuran printer thermal yang umum di warung); aturan cetaknya ada di css/styles.css
+// Tata letak 58 mm (ukuran printer thermal yang umum di warung); aturan cetaknya ada di css/reports.css
 // (#receiptPrint), sehingga tidak mengganggu cetak Laporan.
 //
 // Bentuk struk (dari js/pages/transaksi.js):

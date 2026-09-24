@@ -10,6 +10,8 @@ import { registerServiceWorker, watchConnectivity, onFlushRequested } from './pw
 import { setupShell } from './shell.js';
 import { startRouter } from './routes.js';
 import { showWelcomePopup } from './welcome.js';
+import { readLaunchIntent, pendingSearch } from './deeplink.js';
+import { registerFileHandler } from './import.js';
 
 // ============ TITIK MASUK APLIKASI ============
 // Urutan: sistem inti → PWA → cek login → (bila login) muat data dari database → pasang cangkang & rute.
@@ -55,6 +57,15 @@ function showInitError(err) {
   document.getElementById('errReloadBtn')?.addEventListener('click', () => window.location.reload());
 }
 
+// Aplikasi dibuka dari luar (protocol handler, share target, catatan baru): buka halaman tujuan dan
+// hapus query dari alamat. Dijalankan SEBELUM router mulai agar halaman pertama langsung yang benar.
+function applyLaunchIntent() {
+  const intent = readLaunchIntent(window.location.search);
+  if (!intent) return;
+  if (intent.search && pendingSearch) pendingSearch.put(intent.search);
+  window.history.replaceState(null, '', window.location.pathname + intent.hash);
+}
+
 function startAuthenticatedApp() {
   try {
     // Tenant aktif = tenant milik user yang login
@@ -62,7 +73,9 @@ function startAuthenticatedApp() {
     if (user) TenantStore.setCurrent(user.tenant);
 
     setupShell();
+    applyLaunchIntent();
     startRouter();
+    registerFileHandler();
     startOutboxSync();
     setTimeout(showWelcomePopup, 350);
   } catch (err) {

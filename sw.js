@@ -11,7 +11,7 @@
 //   4. Darurat (bila aplikasi rusak dan menu Pengaturan tak bisa dibuka):
 //      buka  <alamat-app>/index.html?reset-cache=1
 
-const CACHE_NAME = 'klontonk-pos-v4';
+const CACHE_NAME = 'klontonk-pos-v5';
 const OFFLINE_FALLBACK = './offline.html';
 const PERIODIC_SYNC_TAG = 'refresh-app-shell';
 const OUTBOX_SYNC_TAG = 'flush-sales-outbox'; // harus sama dengan js/pwa.js
@@ -26,7 +26,16 @@ const PRECACHE = [
   './index.html',
   OFFLINE_FALLBACK,
   './manifest.json',
-  './css/styles.css',
+  './widgets/quick-actions.json',
+  './widgets/quick-actions-data.json',
+  './css/base.css',
+  './css/navigation.css',
+  './css/home.css',
+  './css/overlays.css',
+  './css/forms.css',
+  './css/common.css',
+  './css/transaksi.css',
+  './css/reports.css',
   './assets/fonts/plus-jakarta-sans-latin.woff2',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
@@ -36,9 +45,13 @@ const PRECACHE = [
   './js/auth.js',
   './js/cart.js',
   './js/config.js',
+  './js/csv.js',
   './js/db-status.js',
+  './js/deeplink.js',
   './js/format.js',
   './js/icons.js',
+  './js/import.js',
+  './js/notes.js',
   './js/outbox.js',
   './js/receipt.js',
   './js/report.js',
@@ -58,6 +71,7 @@ const PRECACHE = [
   './js/ui.js',
   './js/welcome.js',
   './js/pages/akun.js',
+  './js/pages/catatan.js',
   './js/pages/info-update.js',
   './js/updates.js',
   './js/pages/home.js',
@@ -191,6 +205,27 @@ self.addEventListener('sync', (event) => {
       windows.forEach((client) => client.postMessage({ type: 'FLUSH_OUTBOX' }));
     })
   );
+});
+
+// Widget Windows 11 "Aksi Cepat" (manifest.json → widgets): mengisi kartu saat dipasang / dilanjutkan, dan
+// membuka halaman yang dipilih saat tombolnya diketuk. Hanya jalan di Edge/Windows 11; tempat lain diabaikan.
+const WIDGET_ACTIONS = { 'open-kasir': './index.html#/kasir', 'open-stok': './index.html#/stok/total' };
+
+async function refreshWidget(widget) {
+  if (!self.widgets || !widget) return;
+  const { msAcTemplate, data, tag } = widget.definition;
+  const [template, payload] = await Promise.all([
+    fetch(msAcTemplate).then((response) => response.text()),
+    fetch(data).then((response) => response.text())
+  ]);
+  await self.widgets.updateByTag(tag, { template, data: payload });
+}
+
+self.addEventListener('widgetinstall', (event) => event.waitUntil(refreshWidget(event.widget)));
+self.addEventListener('widgetresume', (event) => event.waitUntil(refreshWidget(event.widget)));
+self.addEventListener('widgetclick', (event) => {
+  const url = WIDGET_ACTIONS[event.action];
+  if (url) event.waitUntil(self.clients.openWindow(url));
 });
 
 // Push: sisi penerima. Server pengirim (VAPID + Edge Function) belum ada, jadi belum ada

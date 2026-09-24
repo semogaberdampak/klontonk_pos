@@ -1,0 +1,532 @@
+/* === Halaman Tambah User (Admin) === */
+.users-layout {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+.form-error {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-danger);
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: var(--space-4);
+}
+
+.password-wrap {
+  position: relative;
+  display: flex;
+}
+
+.password-wrap .form-input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.password-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+}
+
+.password-toggle.active { color: var(--color-primary); }
+
+.password-meter {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.pw-bar {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--border-subtle);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.pw-bar[data-active="1"] { background: var(--color-success); }
+.pw-bar[data-active="1"]:nth-child(2) { background: #84CC16; }
+.pw-bar[data-active="1"]:nth-child(3) { background: var(--color-warning); }
+.pw-bar[data-active="1"]:nth-child(4) { background: var(--color-danger); }
+
+.user-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.user-list-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.user-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.user-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.role-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.role-admin {
+  background: rgba(0, 96, 175, 0.12);
+  color: var(--color-primary);
+}
+
+.role-cashier {
+  background: rgba(22, 163, 74, 0.12);
+  color: var(--color-success);
+}
+
+.user-you {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+
+.user-delete {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-danger);
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.user-delete:hover {
+  background: var(--color-danger);
+  color: #FFFFFF;
+  border-color: var(--color-danger);
+}
+
+.user-delete:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.3);
+}
+
+/* === Halaman Stok Awal === */
+.stok-layout {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.stok-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.stok-head .section-title { margin: 0; }
+
+.stok-count {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.stok-head .stok-add-btn { padding: 8px 14px; }
+
+.stok-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.stok-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.stok-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.stok-row.is-editing {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.stok-meta { min-width: 0; flex: 1; }
+
+.stok-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stok-sub {
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.stok-qty {
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.stok-qty strong {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.stok-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.icon-action {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.icon-action:hover {
+  background: var(--color-primary);
+  color: #FFFFFF;
+  border-color: var(--color-primary);
+}
+
+.icon-action.danger {
+  color: var(--color-danger);
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
+.icon-action.danger:hover {
+  background: var(--color-danger);
+  color: #FFFFFF;
+  border-color: var(--color-danger);
+}
+
+.icon-action:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.stok-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.stok-fields select.form-input {
+  padding-right: 34px;
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236F6357' stroke-width='3'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+.stok-form-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.stok-form-actions .btn { flex: 1; }
+.stok-form-actions .btn[hidden] { display: none; }
+
+/* === Halaman Update Harga === */
+.harga-value {
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.harga-value.is-empty {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.harga-row.is-editing { flex-wrap: wrap; }
+.harga-row.is-editing .stok-meta { flex-basis: 100%; }
+
+.harga-edit-form {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.harga-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.harga-prefix {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* Selector lebih spesifik agar tidak ditimpa .form-input yang didefinisikan lebih bawah */
+.harga-input-wrap .harga-input {
+  width: 100%;
+  padding-left: 33px;
+}
+
+.harga-edit-form .btn {
+  flex-shrink: 0;
+  padding: 10px 14px;
+}
+
+.harga-error {
+  flex-basis: 100%;
+  margin: var(--space-2) 0 0;
+}
+
+/* === Barcode (Stok Awal) === */
+.field-optional {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.stok-barcode {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+.barcode-field {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.barcode-field .form-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+
+.barcode-field .btn {
+  flex-shrink: 0;
+  gap: 6px;
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+/* === Pemindai Barcode (kamera) === */
+.scanner-overlay {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: min(var(--app-width), 100%);
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  background: #0A1628;
+  color: #FFFFFF;
+}
+
+.scanner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) var(--space-4) 12px;
+}
+
+.scanner-title {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.scanner-close {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.scanner-close:hover { background: rgba(255, 255, 255, 0.22); }
+.scanner-close:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45); }
+
+.scanner-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #000000;
+}
+
+.scanner-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scanner-frame {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 50%;
+  height: 32%;
+  transform: translateY(-50%);
+  border: 2px solid #FFC72C;
+  border-radius: 12px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.5);
+}
+
+.scanner-line {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 2px;
+  background: rgba(255, 90, 90, 0.95);
+  box-shadow: 0 0 8px rgba(255, 90, 90, 0.8);
+  animation: scannerPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes scannerPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.scanner-status {
+  min-height: 40px;
+  padding: var(--space-4) var(--space-4) 0;
+  text-align: center;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Selector lebih spesifik: .btn-large (lebih bawah di file) memaksa width 100% */
+.scanner-overlay .scanner-cancel {
+  width: auto;
+  margin: var(--space-3) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+}
+

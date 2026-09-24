@@ -8,7 +8,9 @@ import {
   summarize, balance, cashSuggestions, parseAmount
 } from '../cart.js';
 import { esc, escAttr, formatQty, formatRupiah } from '../format.js';
+import { Auth } from '../auth.js';
 import { autoPrint, printReceipt } from '../receipt.js';
+import { pendingSearch } from '../deeplink.js';
 
 // ============ HALAMAN TRANSAKSI (KASIR) ============
 // Alur: pilih barang (cari / scan / ketuk kartu) → keranjang → bayar → struk.
@@ -85,7 +87,9 @@ function gridHtml(items) {
     .sort((a, b) => Number(isSellable(b)) - Number(isSellable(a)) || a.name.localeCompare(b.name, 'id'));
 
   if (!items.length) {
-    return '<li class="trx-empty">Belum ada barang. Tambahkan dulu di <a href="#/stok/awal">Stok Awal</a>.</li>';
+    return Auth.canEditStock()
+      ? '<li class="trx-empty">Belum ada barang. Tambahkan dulu di <a href="#/stok/awal">Stok Awal</a>.</li>'
+      : '<li class="trx-empty">Belum ada barang. Stok diinput oleh tenantnya sendiri.</li>';
   }
   if (!visible.length) {
     return `<li class="trx-empty">Tidak ada barang untuk “${esc(query)}”.</li>`;
@@ -298,6 +302,14 @@ export function initTransaksiPage() {
     query = searchInput.value.trim();
     renderGrid();
   });
+
+  // Aplikasi dibuka lewat "Bagikan" dari aplikasi lain: isi pencarian dengan teks yang dibagikan.
+  const shared = pendingSearch && pendingSearch.take();
+  if (shared) {
+    searchInput.value = shared;
+    query = shared;
+    renderGrid();
+  }
 
   // Enter pada barcode yang persis cocok (mis. hasil ketik/tempel) langsung menambah barang
   searchInput.addEventListener('keydown', (event) => {

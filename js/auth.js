@@ -470,6 +470,11 @@ class AuthManager {
   isAdmin() {
     return this.currentUser !== null && this.currentUser.role === 'admin';
   }
+
+  // Stok tenant hanya boleh diinput oleh akun tenant itu sendiri; admin hanya membaca (ditegakkan juga oleh RLS).
+  canEditStock() {
+    return this.currentUser !== null && this.currentUser.role !== 'admin';
+  }
 }
 
 export const Auth = new AuthManager();

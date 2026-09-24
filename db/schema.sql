@@ -155,6 +155,12 @@ CREATE OR REPLACE FUNCTION public.can_access_tenant(t text) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
 AS $$ SELECT COALESCE((SELECT role = 'admin' OR tenant_id = t FROM public.profiles WHERE id = auth.uid()), false) $$;
 
+-- Boleh MENULIS stok tenant tertentu: hanya akun kasir dari tenant itu sendiri. Admin hanya membaca stok
+-- (stok tenant diinput oleh tenantnya sendiri; admin punya dashboard terpisah).
+CREATE OR REPLACE FUNCTION public.is_tenant_cashier(t text) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+AS $$ SELECT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'cashier' AND tenant_id = t) $$;
+
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
@@ -190,13 +196,14 @@ CREATE POLICY profiles_admin_update ON profiles FOR UPDATE TO authenticated
 
 DROP POLICY IF EXISTS stock_select ON stock_items;
 CREATE POLICY stock_select ON stock_items FOR SELECT TO authenticated USING (public.can_access_tenant(tenant_id));
+-- Baca stok: admin semua tenant, kasir tenant sendiri. TULIS stok: hanya kasir tenant itu sendiri.
 DROP POLICY IF EXISTS stock_insert ON stock_items;
-CREATE POLICY stock_insert ON stock_items FOR INSERT TO authenticated WITH CHECK (public.can_access_tenant(tenant_id));
+CREATE POLICY stock_insert ON stock_items FOR INSERT TO authenticated WITH CHECK (public.is_tenant_cashier(tenant_id));
 DROP POLICY IF EXISTS stock_update ON stock_items;
 CREATE POLICY stock_update ON stock_items FOR UPDATE TO authenticated
-  USING (public.can_access_tenant(tenant_id)) WITH CHECK (public.can_access_tenant(tenant_id));
+  USING (public.is_tenant_cashier(tenant_id)) WITH CHECK (public.is_tenant_cashier(tenant_id));
 DROP POLICY IF EXISTS stock_delete ON stock_items;
-CREATE POLICY stock_delete ON stock_items FOR DELETE TO authenticated USING (public.can_access_tenant(tenant_id));
+CREATE POLICY stock_delete ON stock_items FOR DELETE TO authenticated USING (public.is_tenant_cashier(tenant_id));
 
 DROP POLICY IF EXISTS sales_select ON sales;
 CREATE POLICY sales_select ON sales FOR SELECT TO authenticated USING (public.can_access_tenant(tenant_id));
@@ -507,7 +514,7 @@ REVOKE ALL ON FUNCTION public.process_return(text, text, text, integer, text, te
 GRANT EXECUTE ON FUNCTION public.process_return(text, text, text, integer, text, text) TO authenticated;
 REVOKE ALL ON FUNCTION public.delete_app_user(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.delete_app_user(text) TO authenticated;
-REVOKE ALL ON FUNCTION public.app_role(), public.can_access_tenant(text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.app_role(), public.can_access_tenant(text) TO authenticated;
+REVOKE ALL ON FUNCTION public.app_role(), public.can_access_tenant(text), public.is_tenant_cashier(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.app_role(), public.can_access_tenant(text), public.is_tenant_cashier(text) TO authenticated;
 
 COMMIT;

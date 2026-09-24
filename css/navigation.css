@@ -1,0 +1,395 @@
+/* === Bottom Navigation (pengganti drawer) === */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(var(--app-width), 100%);
+  z-index: 60;
+  display: flex;
+  gap: 2px;
+  overscroll-behavior: none; /* nav tidak ikut rubber saat scroll mentok */
+  /* Emas muda — ikon & teks coklat gelap agar kontras dan mudah dibaca */
+  background: linear-gradient(180deg, #F1DFA9 0%, #E5C97E 100%);
+  border-top: 1px solid rgba(122, 94, 20, 0.45);
+  padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -6px 20px rgba(140, 108, 30, 0.30);
+}
+
+.bottom-tab {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 2px;
+  border-radius: var(--radius-sm);
+  color: #5C460F;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  transition: color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bottom-tab svg { flex-shrink: 0; opacity: 0.92; }
+.bottom-tab:hover { color: #3E2F0A; background: rgba(92, 70, 15, 0.10); }
+.bottom-tab:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(62, 47, 10, 0.25); }
+.bottom-tab.active { color: #3E2F0A; background: rgba(92, 70, 15, 0.13); }
+.bottom-tab.active svg { opacity: 1; }
+
+.bottom-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 3px;
+  border-radius: 3px;
+  background: #8A6A15;
+}
+
+/* Aksen khusus tab tengah (Transaksi) — orb biru BCA terangkat di atas nav emas */
+.bottom-tab .tab-orb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-top: -14px;
+  border-radius: var(--radius-circle);
+  background: linear-gradient(135deg, #0060AF 0%, #003D73 100%);
+  color: #FFFFFF;
+  border: 2px solid #E5C97E;
+  box-shadow: 0 4px 12px rgba(0, 61, 115, 0.35);
+  transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.bottom-tab.accent:hover .tab-orb,
+.bottom-tab.accent.active .tab-orb {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 61, 115, 0.45);
+}
+
+.bottom-tab.accent svg { opacity: 1; }
+
+/* Ikon tab Transaksi selalu center di dalam orb */
+.bottom-tab .tab-orb svg {
+  display: block;
+  margin: auto;
+}
+
+/* Tema gelap: nav tetap emas — warna teks coklat gelap sudah kontras di kedua tema */
+
+/* Layar lebar: nav tetap selebar kolom aplikasi, dengan sudut membulat */
+@media (min-width: 481px) {
+  .bottom-nav {
+    border: 1px solid rgba(122, 94, 20, 0.45);
+    border-bottom: none;
+    border-radius: 16px 16px 0 0;
+  }
+}
+
+/* === Bottom Sheet (menu slide-up) === */
+.sheet-root {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: min(var(--app-width), 100%);
+  transform: translateX(-50%);
+  z-index: 90;
+  pointer-events: none;
+}
+
+.sheet-root.open { pointer-events: auto; }
+
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 22, 40, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.sheet-root.open .sheet-backdrop { opacity: 1; }
+
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0 auto;
+  width: 100%;
+  max-height: 82vh;
+  overflow-y: auto;
+  overscroll-behavior-y: none; /* anti rubber saat konten sheet mentok */
+  background: linear-gradient(180deg, #F1DFA9 0%, #E7CA80 100%);
+  border: 1px solid rgba(122, 94, 20, 0.4);
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+  box-shadow: var(--shadow-lg);
+  padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  /* Slide-up halus dari bawah */
+  transform: translateY(100%);
+  transition: transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sheet-root.open .sheet { transform: translateY(0); }
+
+/* Varian sheet kiri — menu akun dari tombol burger (slide dari kiri ke kanan).
+   Kolom flex: daftar menu scrollable, footer (pengaturan/logout/versi) terpin di bawah. */
+.sheet.side-left {
+  top: 0;
+  left: 0;
+  right: auto;
+  bottom: 0;
+  width: min(360px, 92%);
+  max-height: none;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* scroll hanya pada .sheet-items */
+  overscroll-behavior: none; /* footer tidak ikut efek rubber */
+  border: 1px solid rgba(122, 94, 20, 0.4);
+  border-left: none;
+  border-radius: 0 20px 0 0;
+  transform: translateX(-105%);
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sheet-root.open .sheet.side-left { transform: translateX(0); }
+
+/* Daftar menu sheet kiri: satu-satunya area scroll, tanpa rubber effect */
+.sheet.side-left .sheet-items {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Footer sheet — sejajar & terpin di bawah (seperti bottom navigation).
+   Urutan dari BAWAH: versi aplikasi → tombol logout → menu pengaturan. */
+.sheet-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Garis pemisah di atas Logout (pseudo-element agar tidak ikut melengkung mengikuti sudut tombol) */
+.sheet-footer .sheet-item.danger {
+  position: relative;
+  margin-top: 6px;
+}
+.sheet-footer .sheet-item.danger::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(122, 94, 20, 0.35);
+}
+
+/* Item sheet: muncul berurutan (stagger) — slide halus ke atas */
+.sheet-item,
+.sheet-cta,
+.sheet-profile,
+.sheet-title {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.sheet-root.open .sheet-item,
+.sheet-root.open .sheet-cta,
+.sheet-root.open .sheet-profile,
+.sheet-root.open .sheet-title {
+  animation: sheetItemIn 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms + 70ms);
+}
+
+@keyframes sheetItemIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 4px;
+  background: #8A6A15;
+  margin: 0 auto 10px;
+}
+
+.sheet-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6B5620;
+  padding: 4px 8px 10px;
+}
+
+.sheet-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px 8px 14px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(122, 94, 20, 0.35);
+}
+
+/* Teks profil di atas emas tetap kontras */
+.sheet .profile-name { color: #3E2F0A; }
+.sheet .profile-role { color: #6B5620; }
+
+.sheet-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sheet-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 12px 10px;
+  border-radius: var(--radius-sm);
+  color: #43350D;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.sheet-item:hover { background: rgba(92, 70, 15, 0.12); }
+.sheet-item:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(62, 47, 10, 0.25); }
+
+.sheet-item-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: rgba(92, 70, 15, 0.13);
+  color: #6B530F;
+}
+
+.sheet-item.danger .sheet-item-icon { background: rgba(180, 35, 24, 0.14); color: #B42318; }
+.sheet-item.danger { color: #B42318; }
+
+.sheet-item-text { display: flex; flex-direction: column; min-width: 0; }
+.sheet-item-desc { font-size: 11.5px; font-weight: 500; color: #6B5620; margin-top: 1px; }
+
+/* Tombol CTA footer sheet (logout) — dibuat seperti tombol login:
+   lebar penuh, teks tengah, namun latar merah bata muda dengan
+   teks putih tebal agar mudah dibaca. */
+.sheet-cta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, #C15530 0%, #A83E1D 100%);
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  box-shadow: 0 2px 8px rgba(168, 62, 29, 0.35);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.sheet-cta-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sheet-cta:hover {
+  background: linear-gradient(135deg, #AE4A24 0%, #933415 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(168, 62, 29, 0.45);
+}
+
+.sheet-cta:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(168, 62, 29, 0.35);
+}
+
+.sheet-cta:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(168, 62, 29, 0.4);
+}
+
+/* Versi aplikasi di footer sheet — tulisan lebih kecil, tidak dapat diklik */
+.sheet-version {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #6B5620;
+  text-align: center;
+  opacity: 0.75;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* === Halaman Akun & Pengaturan === */
+.account-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+.account-avatar { width: 56px; height: 56px; font-size: 22px; }
+.account-rows { display: flex; flex-direction: column; border-top: 1px solid var(--border-subtle); margin-bottom: var(--space-4); }
+.account-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+.account-row span:last-child { font-weight: 600; color: var(--text-primary); }
+
+.theme-options { display: flex; gap: var(--space-2); }
+.theme-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-2);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.theme-option:hover { border-color: var(--border-strong); }
+.theme-option.active { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft); }
+/* === Main Content === */
+.app-main {
+  flex: 1;
+  padding: var(--space-4);
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); /* ruang bottom nav */
+  width: 100%;
+  margin: 0 auto;
+  overscroll-behavior-y: none; /* konten halaman tidak rubber */
+  animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

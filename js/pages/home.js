@@ -1,3 +1,4 @@
+import { Auth } from '../auth.js';
 import { TenantStore } from '../tenant.js';
 import { StockStore, LOW_STOCK_MAX } from '../stock.js';
 import { SalesStore } from '../sales.js';
@@ -153,7 +154,7 @@ export function renderHome() {
           </div>
         </button>
 
-        <button class="quick-card" data-navigate="#/harga">
+        ${Auth.canEditStock() ? `<button class="quick-card" data-navigate="#/harga">
           <div class="quick-card-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="1" x2="12" y2="23"></line>
@@ -164,7 +165,7 @@ export function renderHome() {
             <div class="quick-card-title">Update Harga</div>
             <div class="quick-card-desc">Sesuaikan harga produk</div>
           </div>
-        </button>
+        </button>` : ''}
 
         <button class="quick-card" data-navigate="#/laporan/stok-awal">
           <div class="quick-card-icon">

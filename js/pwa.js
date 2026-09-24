@@ -6,7 +6,7 @@ const CACHE_RESET_TIMEOUT_MS = 8000;
 const PERIODIC_SYNC_TAG = 'refresh-app-shell'; // harus sama dengan sw.js
 const PERIODIC_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const OUTBOX_SYNC_TAG = 'flush-sales-outbox'; // harus sama dengan sw.js
-export const FLUSH_OUTBOX_MESSAGE = 'FLUSH_OUTBOX'; // dikirim sw.js ke halaman saat event sync berjalan
+const FLUSH_OUTBOX_MESSAGE = 'FLUSH_OUTBOX'; // dikirim sw.js ke halaman saat event sync berjalan
 
 export function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;

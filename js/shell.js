@@ -12,7 +12,7 @@ import { checkDbStatus, describeDb } from './db-status.js';
 const navigate = (path) => { window.location.hash = path; };
 
 const STOK_MENU = [
-  { id: '/stok/awal', label: 'Stok Awal', desc: 'Input & lihat stok awal periode' },
+  { id: '/stok/awal', label: 'Stok Awal', desc: 'Input & lihat stok awal periode', tenantOnly: true },
   { id: '/stok/keluar-laku', label: 'Stok Keluar (Laku)', desc: 'Stok keluar akibat penjualan' },
   { id: '/stok/retur', label: 'Stok Retur', desc: 'Retur pelanggan & barang rusak' },
   { id: '/stok/total', label: 'Stok Total', desc: 'Sisa stok terakhir setelah transaksi' }
@@ -25,12 +25,15 @@ const LAPORAN_MENU = [
   { id: '/laporan/stok-total', label: 'Stok Total', desc: 'Laporan sisa stok terkini' }
 ];
 
+// Menu input stok / harga disembunyikan untuk admin: stok tenant hanya boleh diinput tenantnya sendiri.
+const visibleForUser = (item) => !item.tenantOnly || Auth.canEditStock();
+
 // Tab → sheet sub-menu; memilih satu item berpindah ke rutenya.
 function bindSheetTab(bottomNav, tab, title, items) {
   const button = bottomNav.querySelector(`[data-tab="${tab}"]`);
   if (!button) return;
   button.addEventListener('click', async () => {
-    const sel = await UI.sheet({ title, items: items.map((item) => ({ ...item, icon: SHEET_ICONS.box })) });
+    const sel = await UI.sheet({ title, items: items.filter(visibleForUser).map((item) => ({ ...item, icon: SHEET_ICONS.box })) });
     if (sel) navigate(sel.id);
   });
 }
@@ -51,13 +54,13 @@ function setupBottomNav() {
   const lainnyaTab = bottomNav.querySelector('[data-tab="lainnya"]');
   if (lainnyaTab) lainnyaTab.addEventListener('click', async () => {
     const items = [
-      { id: '/harga', label: 'Update Harga', desc: 'Atur harga jual per barang', icon: SHEET_ICONS.dollar },
+      { id: '/harga', label: 'Update Harga', desc: 'Atur harga jual per barang', icon: SHEET_ICONS.dollar, tenantOnly: true },
       { id: '/info-update', label: 'Info Update', desc: 'Perubahan terbaru & maintenance', icon: SHEET_ICONS.info }
     ];
     if (Auth.isAdmin()) {
       items.push({ id: '/users', label: 'Tambah User', desc: 'Kelola akun admin & kasir', icon: SHEET_ICONS.userPlus });
     }
-    const sel = await UI.sheet({ title: 'Lainnya', items });
+    const sel = await UI.sheet({ title: 'Lainnya', items: items.filter(visibleForUser) });
     if (sel) navigate(sel.id);
   });
 }
