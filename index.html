@@ -13,7 +13,7 @@
        - connect: ws/wss untuk websocket Live Server
        - 'frame-ancestors' dihapus (tidak valid via <meta>) -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'sha256-vvt4KWwuNr51XfE5m+hzeNEGhiOfZzG97ccfqGsPwvE='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://bxynoilzdiqjiepdewnp.supabase.co wss://bxynoilzdiqjiepdewnp.supabase.co; base-uri 'self'; form-action 'self'" />
+        content="default-src 'self'; script-src 'self' 'sha256-vvt4KWwuNr51XfE5m+hzeNEGhiOfZzG97ccfqGsPwvE=' 'sha256-VQ/jtcHShyK9MaXWdq8Gszyqu7BgQOMIrx63/H4DNF8='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://bxynoilzdiqjiepdewnp.supabase.co wss://bxynoilzdiqjiepdewnp.supabase.co; base-uri 'self'; form-action 'self'" />
   
   <title>Klontonk POS</title>
   <link rel="manifest" href="manifest.json" />
@@ -108,6 +108,13 @@
   
   <!-- ============ SCRIPTS ============ -->
   <!-- v1.2.0: cache-busting — naikkan versi setiap rilis -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+      });
+    }
+  </script>
   <script src="assets/vendor/supabase/supabase.js"></script>
   <script type="module" src="js/app.js?v=1.2.0"></script>
 </body>
