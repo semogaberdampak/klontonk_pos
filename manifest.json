@@ -14,7 +14,9 @@
   "categories": ["business", "productivity"],
   "display_override": ["standalone", "window-controls-overlay", "tabbed", "minimal-ui"],
   "prefer_related_applications": false,
-  "related_applications": [],
+  "related_applications": [
+    { "platform": "webapp", "url": "https://semogaberdampak.github.io/klontonk_pos/manifest.json" }
+  ],
   "launch_handler": { "client_mode": "navigate-existing" },
   "handle_links": "preferred",
   "edge_side_panel": { "preferred_width": 480 },
