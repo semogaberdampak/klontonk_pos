@@ -11,7 +11,7 @@
 //   4. Darurat (bila aplikasi rusak dan menu Pengaturan tak bisa dibuka):
 //      buka  <alamat-app>/index.html?reset-cache=1
 
-const CACHE_NAME = 'klontonk-pos-v5';
+const CACHE_NAME = 'klontonk-pos-v6';
 const OFFLINE_FALLBACK = './offline.html';
 const PERIODIC_SYNC_TAG = 'refresh-app-shell';
 const OUTBOX_SYNC_TAG = 'flush-sales-outbox'; // harus sama dengan js/pwa.js
@@ -57,6 +57,7 @@ const PRECACHE = [
   './js/report.js',
   './js/returns.js',
   './js/sales.js',
+  './js/push.js',
   './js/pwa.js',
   './js/router.js',
   './js/routes.js',
@@ -241,6 +242,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(payload.title || 'Klontonk POS', {
       body: payload.body || '',
       icon: './assets/icons/icon-192.png',
+      tag: payload.tag || undefined, // notifikasi berjenis sama saling menggantikan, tidak menumpuk
       data: { url: payload.url || './index.html' }
     })
   );

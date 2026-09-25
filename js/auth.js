@@ -2,6 +2,7 @@ import { UI } from './ui.js';
 import { EMAIL_DOMAIN } from './config.js';
 import { db, run, signIn, signOut, signUpDetached, hasSession } from './supabase.js';
 import { snapshots } from './snapshot.js';
+import { dropLocalPushSubscription } from './push.js';
 
 // ============ AUTHENTICATION SYSTEM ============
 //
@@ -449,6 +450,7 @@ class AuthManager {
     localStorage.removeItem('klontonk_session');
     localStorage.removeItem('klontonk_last_activity');
     snapshots?.clearAll(); // salinan stok offline tidak boleh tertinggal untuk pengguna berikutnya
+    dropLocalPushSubscription(); // perangkat bersama: notifikasi akun ini tidak boleh sampai ke pengguna berikutnya
     signOut();
     if (this.timeoutInterval) {
       clearInterval(this.timeoutInterval);

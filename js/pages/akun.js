@@ -5,6 +5,7 @@ import { UI } from '../ui.js';
 import { esc, escAttr, formatRupiah } from '../format.js';
 import { SalesStore } from '../sales.js';
 import { autoPrint } from '../receipt.js';
+import { getPushState, enablePush, disablePush, sendTestPush } from '../push.js';
 import { isOnline, isOfflineReady, clearAppCache } from '../pwa.js';
 
 // ============ HALAMAN INFORMASI AKUN & PENGATURAN ============
@@ -95,6 +96,12 @@ export function renderPengaturanPage() {
       <p class="field-hint" style="margin-bottom:12px;">Catatan singkat untuk serah terima shift. Tersimpan di perangkat ini.</p>
       <button type="button" class="btn btn-secondary btn-large" data-navigate="#/catatan">Buka Catatan</button>
     </div>
+    <div class="activity-card" style="padding: 24px; margin-top: 16px;" id="pushCard">
+      <h2 class="section-title" style="margin-bottom:12px;">Notifikasi</h2>
+      <p class="field-hint" id="pushStatus" style="margin-bottom:8px;">Memeriksa…</p>
+      <p class="field-hint" style="margin-bottom:12px;">Yang dikirim: info update dari admin${Auth.isAdmin() ? ' dan penjualan offline yang perlu ditinjau' : ''}.</p>
+      <div id="pushActions" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+    </div>
     <div class="activity-card" style="padding: 24px; margin-top: 16px;">
       <h2 class="section-title" style="margin-bottom:12px;">Struk</h2>
       <div class="account-rows" style="margin-bottom:12px;">
@@ -174,7 +181,51 @@ function initAutoPrintToggle() {
   });
 }
 
+const PUSH_TEXT = {
+  unsupported: 'Perangkat atau browser ini tidak mendukung notifikasi. Di iPhone, pasang aplikasi ke Layar Utama dulu (iOS 16.4 ke atas).',
+  denied: 'Notifikasi diblokir di browser. Buka pengaturan situs untuk mengizinkannya, lalu muat ulang halaman.',
+  off: 'Notifikasi belum aktif di perangkat ini.',
+  on: 'Notifikasi aktif di perangkat ini.'
+};
+
+// Kartu notifikasi: tampilkan keadaan perangkat, dengan tombol sesuai keadaannya.
+async function initPushCard() {
+  const card = document.getElementById('pushCard');
+  const statusEl = document.getElementById('pushStatus');
+  const actions = document.getElementById('pushActions');
+  if (!card || !statusEl || !actions) return;
+
+  const button = (action, label, secondary = true) =>
+    `<button type="button" class="btn ${secondary ? 'btn-secondary' : 'btn-primary'}" data-push="${action}">${label}</button>`;
+
+  const render = async () => {
+    const state = await getPushState();
+    statusEl.textContent = PUSH_TEXT[state];
+    actions.innerHTML = state === 'off' ? button('enable', 'Aktifkan Notifikasi', false)
+      : state === 'on' ? button('test', 'Kirim Notifikasi Uji') + button('disable', 'Matikan')
+      : '';
+  };
+
+  card.addEventListener('click', async (event) => {
+    const target = event.target.closest('[data-push]');
+    if (!target) return;
+    target.disabled = true;
+
+    const outcome = target.dataset.push === 'enable' ? await enablePush()
+      : target.dataset.push === 'disable' ? await disablePush()
+      : await sendTestPush();
+
+    if (!outcome.ok) UI.toast(outcome.error, { type: 'danger', duration: 7000 });
+    else if (target.dataset.push === 'enable') UI.toast('Notifikasi diaktifkan.', { type: 'success' });
+    else if (target.dataset.push === 'test') UI.toast('Notifikasi uji dikirim. Cek perangkat Anda.', { type: 'success' });
+    await render();
+  });
+
+  await render();
+}
+
 export function initPengaturanPage() {
+  initPushCard();
   initAutoPrintToggle();
   initOfflineQueueCard();
   const clearBtn = document.getElementById('clearCacheBtn');

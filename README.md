@@ -52,6 +52,34 @@ Kamera (scanner) dan Service Worker hanya jalan di **HTTPS atau `localhost`**.
 - Penjualan yang belum terkirim hilang jika data situs dihapus dari browser, jadi jangan menghapus data
   situs sebelum antrean kosong (kartu **Penjualan Offline** di Pengaturan).
 
+## Notifikasi push
+
+Perangkat yang mengaktifkan **Notifikasi** di Pengaturan menerima: info update dari admin (semua perangkat)
+dan penjualan offline yang perlu ditinjau (hanya admin).
+
+Alur: pemicu di database (`app_updates` dan `sales`) memanggil Edge Function `push` lewat `pg_net`; fungsi itu
+menandatangani (VAPID) dan mengirim ke layanan push browser. Perangkat mendaftar lewat
+`register_push_subscription()`. Kunci VAPID dibuat otomatis oleh fungsi saat pertama dipakai dan disimpan di
+`push_config`, tabel yang tertutup untuk semua pengguna (tidak ada kunci rahasia di repo).
+
+Penyiapan proyek baru (setelah menjalankan `db/schema.sql`):
+
+1. Isi konfigurasi. Rahasia dibuat di dalam database, ganti alamat dengan proyekmu:
+   ```sql
+   insert into public.push_config (id, function_url, webhook_secret)
+   values (1, 'https://<ref-proyek>.supabase.co/functions/v1/push', encode(extensions.gen_random_bytes(32), 'hex'))
+   on conflict (id) do nothing;
+   ```
+2. Deploy fungsi dari `supabase/functions/push` dengan verifikasi JWT **dimatikan** (fungsi memeriksa
+   otorisasinya sendiri: rahasia bersama untuk database, token login untuk notifikasi uji):
+   ```bash
+   supabase functions deploy push --no-verify-jwt
+   ```
+
+Catatan: di iPhone notifikasi hanya jalan bila aplikasi dipasang ke Layar Utama (iOS 16.4 ke atas). Langganan
+dilepas dari perangkat saat logout, jadi pengguna berikutnya tidak menerima notifikasi akun sebelumnya.
+Kegagalan notifikasi tidak pernah menggagalkan penjualan atau info update.
+
 ## Struktur proyek
 
 | Lokasi | Isi |
@@ -61,6 +89,7 @@ Kamera (scanner) dan Service Worker hanya jalan di **HTTPS atau `localhost`**.
 | `js/pages/` | Satu berkas per halaman (kasir, stok, laporan, akun, catatan, dan seterusnya) |
 | `css/` | Gaya, dipecah per bagian. **Urutan** pemuatan di `index.html` menentukan cascade |
 | `db/schema.sql` | Skema, kebijakan RLS, dan fungsi database |
+| `supabase/functions/push/` | Edge Function pengirim notifikasi push (Deno) |
 | `widgets/` | Templat widget Windows |
 | `assets/` | Font, ikon, tangkapan layar, dan pustaka vendor (Supabase SDK, ZXing) |
 | `tests/` | Tes otomatis |
@@ -81,7 +110,7 @@ fungsi SQL tidak diuji oleh tes ini; keduanya diuji langsung di Postgres.
 ## Deploy
 
 Unggah berkas statis ke hosting statis mana pun dengan **HTTPS** (mis. GitHub Pages, Cloudflare Pages).
-Jangan sertakan `db/` dan `tests/` bila tidak perlu.
+Jangan sertakan `db/`, `tests/`, dan `supabase/` bila tidak perlu.
 
 Setiap kali menambah berkas aplikasi baru:
 

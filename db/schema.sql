@@ -122,7 +122,7 @@ CREATE INDEX IF NOT EXISTS stock_returns_item_idx ON stock_returns (tenant_id, i
 -- Semua user login boleh membaca; hanya admin yang boleh menambah / mengubah / menghapus.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS app_updates (
-  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  id          text PRIMARY KEY CHECK (id ~ '^U[0-9]{3,}$'),   -- kode unik U001, U002, ... dibuat otomatis oleh pemicu
   kind        text NOT NULL CHECK (kind IN ('update', 'maintenance')),
   title       text NOT NULL CHECK (char_length(title) BETWEEN 1 AND 80),
   description text CHECK (description IS NULL OR char_length(description) <= 300),
@@ -130,6 +130,65 @@ CREATE TABLE IF NOT EXISTS app_updates (
   sort_order  integer NOT NULL DEFAULT 0,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- Kode unik per info (U001, U002, ...). Dibuat OTOMATIS oleh pemicu: kode terkecil yang masih KOSONG dipakai lebih
+-- dulu, jadi kode bekas info yang dihapus dipakai lagi dan hitungan tidak berlanjut terus. id kiriman klien
+-- diabaikan (tidak bisa bentrok), dan setelah dibuat id tidak bisa diubah.
+
+-- Migrasi dari versi lama (id angka identity): nomor lama dipertahankan (1 -> U001, 5 -> U005).
+-- Tidak melakukan apa-apa bila id sudah berupa teks. Aman diulang.
+DO $$
+BEGIN
+  IF (SELECT data_type FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'app_updates' AND column_name = 'id') = 'bigint' THEN
+    ALTER TABLE public.app_updates ALTER COLUMN id DROP IDENTITY IF EXISTS;
+    ALTER TABLE public.app_updates ALTER COLUMN id TYPE text
+      USING ('U' || CASE WHEN id < 1000 THEN lpad(id::text, 3, '0') ELSE id::text END);
+    ALTER TABLE public.app_updates ADD CONSTRAINT app_updates_id_format CHECK (id ~ '^U[0-9]{3,}$');
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.set_update_code() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  n integer;
+BEGIN
+  -- Serialisasi: dua penambahan bersamaan tidak boleh memilih kode yang sama.
+  PERFORM pg_advisory_xact_lock(hashtextextended('app_updates_code', 0));
+
+  -- Kode terkecil yang belum dipakai. Dari 1..(jumlah+1) pasti ada yang kosong, jadi tidak pernah habis.
+  SELECT min(g) INTO n
+    FROM generate_series(1, (SELECT count(*) + 1 FROM public.app_updates)::integer) AS g
+   WHERE NOT EXISTS (
+     SELECT 1 FROM public.app_updates u
+      WHERE u.id = ('U' || CASE WHEN g < 1000 THEN lpad(g::text, 3, '0') ELSE g::text END));
+
+  NEW.id := 'U' || CASE WHEN n < 1000 THEN lpad(n::text, 3, '0') ELSE n::text END;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.keep_update_code() RETURNS trigger
+LANGUAGE plpgsql SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id THEN
+    RAISE EXCEPTION 'Kode info (id) tidak boleh diubah.' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS app_updates_code ON app_updates;
+CREATE TRIGGER app_updates_code BEFORE INSERT ON app_updates
+  FOR EACH ROW EXECUTE FUNCTION public.set_update_code();
+DROP TRIGGER IF EXISTS app_updates_code_keep ON app_updates;
+CREATE TRIGGER app_updates_code_keep BEFORE UPDATE ON app_updates
+  FOR EACH ROW EXECUTE FUNCTION public.keep_update_code();
+REVOKE ALL ON FUNCTION public.set_update_code(), public.keep_update_code() FROM PUBLIC, anon, authenticated;
+-- Sequence dari versi sebelumnya tidak dipakai lagi.
+DROP SEQUENCE IF EXISTS app_updates_seq;
 
 INSERT INTO app_updates (kind, title, description, color, sort_order)
 SELECT * FROM (VALUES
@@ -516,5 +575,114 @@ REVOKE ALL ON FUNCTION public.delete_app_user(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.delete_app_user(text) TO authenticated;
 REVOKE ALL ON FUNCTION public.app_role(), public.can_access_tenant(text), public.is_tenant_cashier(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.app_role(), public.can_access_tenant(text), public.is_tenant_cashier(text) TO authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Notifikasi push (Web Push). Alur: perangkat mendaftar lewat register_push_subscription(); pemicu di bawah
+-- memanggil Edge Function `push` lewat pg_net; fungsi itu yang menandatangani (VAPID) dan mengirim.
+--   * push_config: alamat fungsi, rahasia bersama (webhook), dan kunci VAPID. RLS aktif TANPA kebijakan dan
+--     tanpa GRANT, jadi hanya service_role / postgres yang bisa membaca. Barisnya diisi saat penyiapan
+--     (lihat README), bukan di skema ini, karena alamat fungsi berbeda per proyek.
+--   * push_subscriptions: satu baris per perangkat. Peran dan tenant diambil dari profil pemanggil, BUKAN
+--     dari klien, sehingga tidak bisa dipalsukan. Penulisan hanya lewat fungsi di bawah.
+--   * Notifikasi TIDAK BOLEH menggagalkan transaksi utama (penjualan / info update): semua galat pemicu ditelan.
+-- ---------------------------------------------------------------------------
+-- Di skema `extensions` (bukan public): pg_net tidak bisa dipindah dengan SET SCHEMA setelah terpasang.
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
+
+CREATE TABLE IF NOT EXISTS push_config (
+  id             integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  function_url   text NOT NULL,
+  webhook_secret text NOT NULL,
+  vapid_public   text,
+  vapid_private  text
+);
+ALTER TABLE push_config ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON push_config FROM anon, authenticated;
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint   text PRIMARY KEY CHECK (endpoint ~ '^https://' AND char_length(endpoint) <= 1000),
+  user_id    uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  tenant_id  text,
+  role       text NOT NULL CHECK (role IN ('admin', 'cashier')),
+  p256dh     text NOT NULL CHECK (char_length(p256dh) <= 200),
+  auth       text NOT NULL CHECK (char_length(auth) <= 100),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions (user_id);
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS push_subscriptions_select ON push_subscriptions;
+CREATE POLICY push_subscriptions_select ON push_subscriptions FOR SELECT TO authenticated USING (user_id = auth.uid());
+REVOKE ALL ON push_subscriptions FROM anon, authenticated;
+GRANT SELECT ON push_subscriptions TO authenticated;
+
+-- Mendaftarkan perangkat untuk pemanggil. Bila perangkat yang sama dipakai akun lain, langganan berpindah
+-- ke akun yang login sekarang. Maksimal 10 perangkat per akun.
+CREATE OR REPLACE FUNCTION public.register_push_subscription(p_endpoint text, p_p256dh text, p_auth text)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_uid    uuid := auth.uid();
+  v_role   text;
+  v_tenant text;
+BEGIN
+  SELECT role, tenant_id INTO v_role, v_tenant FROM public.profiles WHERE id = v_uid;
+  IF v_uid IS NULL OR v_role IS NULL THEN
+    RAISE EXCEPTION 'Akses ditolak.' USING ERRCODE = '42501';
+  END IF;
+  IF p_endpoint IS NULL OR p_endpoint !~ '^https://' OR char_length(p_endpoint) > 1000
+     OR p_p256dh IS NULL OR char_length(p_p256dh) NOT BETWEEN 1 AND 200
+     OR p_auth IS NULL OR char_length(p_auth) NOT BETWEEN 1 AND 100 THEN
+    RAISE EXCEPTION 'Langganan tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  IF (SELECT count(*) FROM public.push_subscriptions WHERE user_id = v_uid AND endpoint <> p_endpoint) >= 10 THEN
+    RAISE EXCEPTION 'Terlalu banyak perangkat terdaftar (maksimal 10).' USING ERRCODE = 'P0001';
+  END IF;
+
+  INSERT INTO public.push_subscriptions (endpoint, user_id, tenant_id, role, p256dh, auth)
+  VALUES (p_endpoint, v_uid, v_tenant, v_role, p_p256dh, p_auth)
+  ON CONFLICT (endpoint) DO UPDATE
+    SET user_id = EXCLUDED.user_id, tenant_id = EXCLUDED.tenant_id, role = EXCLUDED.role,
+        p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.unregister_push_subscription(p_endpoint text)
+RETURNS void
+LANGUAGE sql SECURITY DEFINER SET search_path = ''
+AS $$ DELETE FROM public.push_subscriptions WHERE endpoint = p_endpoint AND user_id = auth.uid() $$;
+
+-- Pemicu: kirim kejadian ke Edge Function. Tanpa baris push_config (belum disiapkan) tidak melakukan apa-apa.
+CREATE OR REPLACE FUNCTION public.notify_push() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  cfg public.push_config%ROWTYPE;
+BEGIN
+  SELECT * INTO cfg FROM public.push_config WHERE id = 1;
+  IF FOUND THEN
+    PERFORM net.http_post(
+      url     := cfg.function_url,
+      headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', cfg.webhook_secret),
+      body    := jsonb_build_object('kind', TG_ARGV[0], 'record', to_jsonb(NEW))
+    );
+  END IF;
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'notify_push gagal: %', SQLERRM;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS app_updates_push ON app_updates;
+CREATE TRIGGER app_updates_push AFTER INSERT ON app_updates
+  FOR EACH ROW EXECUTE FUNCTION public.notify_push('announcement');
+DROP TRIGGER IF EXISTS sales_review_push ON sales;
+CREATE TRIGGER sales_review_push AFTER INSERT ON sales
+  FOR EACH ROW WHEN (NEW.review_note IS NOT NULL) EXECUTE FUNCTION public.notify_push('sale_review');
+
+REVOKE ALL ON FUNCTION public.notify_push() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.register_push_subscription(text, text, text), public.unregister_push_subscription(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.register_push_subscription(text, text, text), public.unregister_push_subscription(text) TO authenticated;
 
 COMMIT;
