@@ -12,6 +12,9 @@ const ICON_TRASH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" 
 
 let editingId = null;
 
+// Kode info dari database (U001, ...). Baris bawaan (d1, d2, ...) belum berkode, jadi tidak ditampilkan.
+const UPDATE_CODE_PATTERN = /^U\d{3,}$/;
+
 function rowHtml(row, isAdmin) {
   const actions = isAdmin ? `
     <div class="stok-actions">
@@ -22,7 +25,7 @@ function rowHtml(row, isAdmin) {
     <li class="welcome-update-item${String(row.id) === String(editingId) ? ' is-editing' : ''}">
       <span class="welcome-update-dot" style="background:${escAttr(row.color)}"></span>
       <div style="flex:1;min-width:0;">
-        <p class="welcome-update-title">${esc(row.title)}</p>
+        <p class="welcome-update-title">${esc(row.title)}${isAdmin && UPDATE_CODE_PATTERN.test(String(row.id)) ? ` <small class="upd-code">${esc(row.id)}</small>` : ''}</p>
         ${row.description ? `<p class="welcome-update-desc">${esc(row.description)}</p>` : ''}
       </div>
       ${actions}

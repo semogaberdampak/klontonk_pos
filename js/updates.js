@@ -3,6 +3,9 @@ import { db, run, describeResult } from './supabase.js';
 // Info Update (perubahan aplikasi & jadwal maintenance) di tabel `app_updates` (db/schema.sql).
 // Semua user boleh membaca; hanya admin yang boleh mengubah (dijaga RLS). Selama belum termuat atau
 // bila database tidak bisa dijangkau, dipakai daftar bawaan di bawah agar popup sapaan tetap punya isi.
+// Kolom `id` adalah kode unik (U001, U002, ...) yang dibuat OTOMATIS oleh database: kode terkecil yang masih
+// kosong dipakai lebih dulu, jadi kode bekas info yang dihapus dipakai lagi. Klien tidak pernah mengirim id
+// saat menambah, dan id tidak bisa diubah setelah dibuat (pemicu di db/schema.sql).
 const TABLE = 'app_updates';
 const COLUMNS = 'id,kind,title,description,color,sort_order';
 
@@ -51,7 +54,8 @@ export const UpdateStore = {
   list(kind) { return rows.filter((row) => row.kind === kind); },
 
   async load() {
-    const result = await run(db.from(TABLE).select(COLUMNS).order('sort_order').order('id'));
+    // id berupa kode teks (U001, ...): jangan jadi pengurut utama, sebab 'U1000' < 'U999' secara alfabet.
+    const result = await run(db.from(TABLE).select(COLUMNS).order('sort_order').order('created_at').order('id'));
     if (!result.ok) return { success: false, error: describe(result), expired: !!result.expired };
     if (result.data.length) rows = result.data.map(toRow);
     return { success: true };

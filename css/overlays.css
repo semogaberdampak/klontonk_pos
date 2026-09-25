@@ -80,6 +80,13 @@
   flex-wrap: wrap;
 }
 
+/* Kode unik info update (U001, ...), hanya tampil untuk admin di halaman Info Update. */
+.upd-code {
+  margin-left: 6px; padding: 1px 6px; font: 700 10.5px/1.4 var(--font-mono); letter-spacing: 0.02em;
+  color: var(--text-muted); background: var(--bg-app); border: 1px solid var(--border-subtle); border-radius: 4px;
+  vertical-align: middle;
+}
+
 /* === Welcome Popup === */
 .welcome-dialog {
   max-width: 400px;

@@ -15,15 +15,17 @@ export function installFakeBrowser() {
   const state = {
     calls: [],
     selects: [],
+    writes: [],
     session: { user: { id: 'user-1' } },
     rpcHandler: () => ({ data: null, error: null, status: 200 }),
-    tableHandler: () => ({ data: [], error: null, status: 200 })
+    tableHandler: () => ({ data: [], error: null, status: 200 }),
+    writeHandler: () => ({ data: null, error: null, status: 200 })
   };
 
   // Hasil query PostgREST/SDK: dapat di-await, dan mendukung rantai .order() .range() .abortSignal().
-  const thenable = (produce) => {
+  const thenable = (produce, orders = []) => {
     const chain = {
-      order: () => chain,
+      order: (column) => { orders.push(column); return chain; },
       range: () => chain,
       abortSignal: () => chain,
       then: (resolve, reject) => Promise.resolve().then(produce).then(resolve, reject)
@@ -37,11 +39,29 @@ export function installFakeBrowser() {
       return thenable(() => state.rpcHandler(name, args));
     },
     from(table) {
+      // insert / update / delete: dicatat di state.writes beserta filter .eq(kolom, nilai)
+      const write = (op, payload) => {
+        const filters = [];
+        const chain = {
+          eq: (column, value) => { filters.push([column, value]); return chain; },
+          then: (resolve, reject) => Promise.resolve()
+            .then(() => {
+              state.writes.push({ table, op, payload: structuredClone(payload), filters });
+              return state.writeHandler(table, op, payload, filters);
+            })
+            .then(resolve, reject)
+        };
+        return chain;
+      };
       return {
         select(columns) {
-          state.selects.push({ table, columns });
-          return thenable(() => state.tableHandler(table, columns));
-        }
+          const query = { table, columns, orders: [] };
+          state.selects.push(query);
+          return thenable(() => state.tableHandler(table, columns), query.orders);
+        },
+        insert: (payload) => write('insert', payload),
+        update: (payload) => write('update', payload),
+        delete: () => write('delete')
       };
     },
     auth: {
@@ -58,8 +78,10 @@ export function installFakeBrowser() {
   return {
     get calls() { return state.calls; },
     get selects() { return state.selects; },
+    get writes() { return state.writes; },
     rpc(handler) { state.rpcHandler = handler; },
     tables(handler) { state.tableHandler = handler; },
+    writeResult(handler) { state.writeHandler = handler; },
     setSession(session) { state.session = session; },
     setOnline(value) { globalThis.navigator.onLine = value; },
     outbox: () => JSON.parse(localStorage.getItem('klontonk:outbox:v1') || '[]'),
@@ -67,9 +89,11 @@ export function installFakeBrowser() {
       store.clear();
       state.calls = [];
       state.selects = [];
+      state.writes = [];
       state.session = { user: { id: 'user-1' } };
       state.rpcHandler = () => ({ data: null, error: null, status: 200 });
       state.tableHandler = () => ({ data: [], error: null, status: 200 });
+      state.writeHandler = () => ({ data: null, error: null, status: 200 });
       globalThis.navigator.onLine = true;
     }
   };
