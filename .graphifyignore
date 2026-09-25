@@ -1,0 +1,7 @@
+# Dikecualikan dari graf pengetahuan Graphify: pustaka pihak ketiga (sudah diminifikasi), gambar, dan indeks alat lain.
+assets/vendor/
+assets/screenshots/
+assets/icons/
+assets/fonts/
+.codegraph/
+graphify-out/
