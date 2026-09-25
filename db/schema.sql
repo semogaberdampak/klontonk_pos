@@ -582,8 +582,9 @@ GRANT EXECUTE ON FUNCTION public.app_role(), public.can_access_tenant(text), pub
 --   * push_config: alamat fungsi, rahasia bersama (webhook), dan kunci VAPID. RLS aktif TANPA kebijakan dan
 --     tanpa GRANT, jadi hanya service_role / postgres yang bisa membaca. Barisnya diisi saat penyiapan
 --     (lihat README), bukan di skema ini, karena alamat fungsi berbeda per proyek.
---   * push_subscriptions: satu baris per perangkat. Peran dan tenant diambil dari profil pemanggil, BUKAN
---     dari klien, sehingga tidak bisa dipalsukan. Penulisan hanya lewat fungsi di bawah.
+--   * push_subscriptions: satu baris per perangkat. Peran diambil dari profil pemanggil, BUKAN dari klien,
+--     sehingga tidak bisa dipalsukan. Klien tidak pernah membacanya (kolom auth adalah rahasia langganan);
+--     penulisan hanya lewat fungsi di bawah, pembacaan hanya oleh Edge Function (service_role).
 --   * Notifikasi TIDAK BOLEH menggagalkan transaksi utama (penjualan / info update): semua galat pemicu ditelan.
 -- ---------------------------------------------------------------------------
 -- Di skema `extensions` (bukan public): pg_net tidak bisa dipindah dengan SET SCHEMA setelah terpasang.
@@ -602,7 +603,6 @@ REVOKE ALL ON push_config FROM anon, authenticated;
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint   text PRIMARY KEY CHECK (endpoint ~ '^https://' AND char_length(endpoint) <= 1000),
   user_id    uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
-  tenant_id  text,
   role       text NOT NULL CHECK (role IN ('admin', 'cashier')),
   p256dh     text NOT NULL CHECK (char_length(p256dh) <= 200),
   auth       text NOT NULL CHECK (char_length(auth) <= 100),
@@ -610,10 +610,11 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 );
 CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions (user_id);
 ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+-- Tanpa kebijakan dan tanpa GRANT: hanya fungsi di bawah (SECURITY DEFINER) dan service_role yang menyentuhnya.
 DROP POLICY IF EXISTS push_subscriptions_select ON push_subscriptions;
-CREATE POLICY push_subscriptions_select ON push_subscriptions FOR SELECT TO authenticated USING (user_id = auth.uid());
 REVOKE ALL ON push_subscriptions FROM anon, authenticated;
-GRANT SELECT ON push_subscriptions TO authenticated;
+-- Versi sebelumnya punya kolom tenant_id yang tidak pernah dipakai.
+ALTER TABLE push_subscriptions DROP COLUMN IF EXISTS tenant_id;
 
 -- Mendaftarkan perangkat untuk pemanggil. Bila perangkat yang sama dipakai akun lain, langganan berpindah
 -- ke akun yang login sekarang. Maksimal 10 perangkat per akun.
@@ -622,11 +623,10 @@ RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
 DECLARE
-  v_uid    uuid := auth.uid();
-  v_role   text;
-  v_tenant text;
+  v_uid  uuid := auth.uid();
+  v_role text;
 BEGIN
-  SELECT role, tenant_id INTO v_role, v_tenant FROM public.profiles WHERE id = v_uid;
+  SELECT role INTO v_role FROM public.profiles WHERE id = v_uid;
   IF v_uid IS NULL OR v_role IS NULL THEN
     RAISE EXCEPTION 'Akses ditolak.' USING ERRCODE = '42501';
   END IF;
@@ -639,11 +639,10 @@ BEGIN
     RAISE EXCEPTION 'Terlalu banyak perangkat terdaftar (maksimal 10).' USING ERRCODE = 'P0001';
   END IF;
 
-  INSERT INTO public.push_subscriptions (endpoint, user_id, tenant_id, role, p256dh, auth)
-  VALUES (p_endpoint, v_uid, v_tenant, v_role, p_p256dh, p_auth)
+  INSERT INTO public.push_subscriptions (endpoint, user_id, role, p256dh, auth)
+  VALUES (p_endpoint, v_uid, v_role, p_p256dh, p_auth)
   ON CONFLICT (endpoint) DO UPDATE
-    SET user_id = EXCLUDED.user_id, tenant_id = EXCLUDED.tenant_id, role = EXCLUDED.role,
-        p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth;
+    SET user_id = EXCLUDED.user_id, role = EXCLUDED.role, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth;
 END;
 $$;
 

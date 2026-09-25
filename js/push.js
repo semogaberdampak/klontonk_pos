@@ -3,7 +3,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 
 // Notifikasi push (Web Push) sisi halaman: izin, langganan perangkat, dan pendaftaran ke server.
 // Alur: minta izin → ambil kunci VAPID publik dari Edge Function `push` → pushManager.subscribe →
-// register_push_subscription() di database (peran dan tenant diambil dari profil pemanggil, bukan dari sini).
+// register_push_subscription() di database (peran diambil dari profil pemanggil, bukan dari sini).
 // Penerimaan notifikasinya ada di sw.js (event `push`); pengirimannya di supabase/functions/push.
 //
 // Privasi perangkat bersama: langganan dilepas dari perangkat saat logout (dropLocalPushSubscription),
